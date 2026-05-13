@@ -330,7 +330,11 @@ class StGitDoc {
 
     // Submodule navigation context
     // Stack of parent repos with their relative paths for navigation
-    private parentRepoStack: { repo: RepositoryInfo; relativePath: string }[] = [];
+    private parentRepoStack: {
+        repo: RepositoryInfo;
+        relativePath: string;
+        submodulePath: string;
+    }[] = [];
     private relativePathFromRoot = '';
 
     // start of history
@@ -1061,6 +1065,7 @@ class StGitDoc {
         this.parentRepoStack.push({
             repo: this.repo,
             relativePath: this.relativePathFromRoot,
+            submodulePath: submodulePath,
         });
 
         // Update the relative path from root
@@ -1093,7 +1098,7 @@ class StGitDoc {
         this.repo = parent.repo;
         RepositoryInfo.setSelectedRepo(parent.repo);
         this.reload();
-        this.moveCursorToIndex();
+        this.moveCursorToDelta(parent.submodulePath);
     }
     async resolveConflict() {
         const change = this.curChange;
@@ -1248,6 +1253,39 @@ class StGitDoc {
         if (!editor)
             return;
         this.moveCursorToIndexAtOpen(editor);
+    }
+
+    private moveCursorToDelta(path: string) {
+        const editor = this.editor;
+        if (!editor)
+            return;
+        let done = false;
+        // The work tree deltas may load after several document
+        // updates, so keep trying on each update until found.
+        const watcher = workspace.onDidChangeTextDocument((e) => {
+            if (e.document !== this.doc || done)
+                return;
+            for (const p of this.patches) {
+                const idx = p.deltas.findIndex(
+                    d => d.path === path);
+                if (idx >= 0) {
+                    const line = p.lineNum + idx + 1;
+                    const pos = new vscode.Position(line, 0);
+                    editor.selection =
+                        new vscode.Selection(pos, pos);
+                    editor.revealRange(
+                        new vscode.Range(pos, pos));
+                    done = true;
+                    return;
+                }
+            }
+        });
+        sleep(4000).then(() => {
+            watcher.dispose();
+            // Fall back to index if delta was never found
+            if (!done)
+                this.moveCursorToIndex();
+        });
     }
 
     private async moveCursorToIndexAtOpen(editor: vscode.TextEditor) {

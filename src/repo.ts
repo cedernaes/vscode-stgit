@@ -56,7 +56,7 @@ export class RepositoryInfo {
      * Returns the stack and the relativePath for the given repo.
      */
     static async buildParentStack(repo: RepositoryInfo): Promise<{
-        stack: { repo: RepositoryInfo; relativePath: string }[];
+        stack: { repo: RepositoryInfo; relativePath: string; submodulePath: string }[];
         relativePath: string;
     }> {
         // Walk up to collect parent repos (nearest parent first)
@@ -84,13 +84,24 @@ export class RepositoryInfo {
             rootDir, repo.topLevelDir);
 
         // Build the stack from root to immediate parent
-        const stack: { repo: RepositoryInfo; relativePath: string }[] = [];
-        for (let i = parents.length - 1; i >= 0; i--) {
-            const p = parents[i];
+        // Each entry's submodulePath is the path from that repo
+        // to the next child repo down the chain
+        const chain = [...parents].reverse(); // [root, ..., immediate parent]
+        const stack: { repo: RepositoryInfo; relativePath: string; submodulePath: string }[] = [];
+        for (let i = 0; i < chain.length; i++) {
+            const child = (i + 1 < chain.length)
+                ? chain[i + 1] : repo;
+            const p = chain[i];
             const relPath = (p.topLevelDir === rootDir)
                 ? ''
                 : path.relative(rootDir, p.topLevelDir);
-            stack.push({ repo: p, relativePath: relPath });
+            const subPath = path.relative(
+                p.topLevelDir, child.topLevelDir);
+            stack.push({
+                repo: p,
+                relativePath: relPath,
+                submodulePath: subPath,
+            });
         }
         return { stack, relativePath };
     }
