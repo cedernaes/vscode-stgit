@@ -244,6 +244,10 @@
             "category": "StGit",
             "title": "Undo Recent Undo"
         }, {
+            "command": "stgit.navigateToParent",
+            "category": "StGit",
+            "title": "Navigate to Parent Repository (from submodule)"
+        }, {
             "command": "stgit.refresh",
             "category": "StGit",
             "title": "Append Changes to Current Patch"
@@ -419,6 +423,10 @@
         }, {
             "key": "enter",
             "command": "stgit.toggleExpand",
+            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+        }, {
+            "key": "-",
+            "command": "stgit.navigateToParent",
             "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
         }, {
             "key": "t",

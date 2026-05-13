@@ -55,6 +55,9 @@ class Delta {
     get conflict() {
         return this.status.startsWith('U');
     }
+    get isSubmodule() {
+        return this.srcMode === '160000' || this.destMode === '160000';
+    }
     private get stageInfoString() {
         if (!this.indexStageInfo.length)
             return "";
@@ -82,9 +85,10 @@ class Delta {
         const what = Delta.STATUS_MESSAGE[this.status];
         const s = `${what}${this.permissionDelta}`;
         const dest = this.destPath ? ` -> ${this.destPath}` : '';
-        const s2 = `    ${s.padEnd(16)} ${this.path}${dest}`;
+        const submoduleMarker = this.isSubmodule ? ' [submodule]' : '';
+        const s2 = `    ${s.padEnd(16)} ${this.path}${dest}${submoduleMarker}`;
         const sinfo = this.stageInfoString;
-        if (!sinfo && !dest)
+        if (!sinfo && !dest && !submoduleMarker)
             return s2;
         return `${s2.padEnd(50)} ${sinfo}`;
     }
@@ -324,6 +328,11 @@ class StGitDoc {
     private remoteBranch: string | null = null;
     private newUpstream = false;
 
+    // Submodule navigation context
+    // Stack of parent repos with their relative paths for navigation
+    private parentRepoStack: { repo: RepositoryInfo; relativePath: string }[] = [];
+    private relativePathFromRoot = '';
+
     // start of history
     private baseSha: string | null = null;
 
@@ -338,6 +347,7 @@ class StGitDoc {
 
     private highlightRanges: vscode.Range[] = [];
     private historyRanges: vscode.Range[] = [];
+    private submoduleRanges: vscode.Range[] = [];
 
     constructor(
         public doc: vscode.TextDocument,
@@ -369,6 +379,7 @@ class StGitDoc {
             })
         );
         this.updateConfiguration({ reload: false });
+        this.setupSubmoduleContext(repo);
         this.reload();
         this.openInitialEditor();
     }
@@ -390,6 +401,13 @@ class StGitDoc {
         this.unknownFilesVisible = config.showUnknownFiles;
         if (opt.reload)
             this.reload();
+    }
+
+    async setupSubmoduleContext(repo: RepositoryInfo) {
+        const { stack, relativePath } =
+            await RepositoryInfo.buildParentStack(repo);
+        this.parentRepoStack = stack;
+        this.relativePathFromRoot = relativePath;
     }
 
     async reloadIndex() {
@@ -842,7 +860,10 @@ class StGitDoc {
         this.reload();
     }
     async switchBranch() {
-        if (this.index.deltas.length || this.workTree.deltas.length) {
+        const indexDeltas = this.index.deltas.filter(d => !d.isSubmodule);
+        const workTreeDeltas = this.workTree.deltas.filter(
+            d => !d.isSubmodule);
+        if (indexDeltas.length || workTreeDeltas.length) {
             info("Work tree and index must be clean to switch branch");
             return;
         }
@@ -999,6 +1020,11 @@ class StGitDoc {
         const patch = this.curPatch;
         const delta = this.curChange;
         if (delta) {
+            // Check if the delta is a submodule - if so, navigate into it
+            if (delta.isSubmodule) {
+                await this.navigateToSubmodule(delta.path);
+                return;
+            }
             const uri = this.repo.getPathUri(delta.path);
             if (!uri)
                 return;
@@ -1019,6 +1045,55 @@ class StGitDoc {
                     this.initializeBranch();
             }
         }
+    }
+    async navigateToSubmodule(submodulePath: string) {
+        // Construct the full path to the submodule
+        const fullPath = this.repo.getPathUri(submodulePath).fsPath;
+
+        // Create a new RepositoryInfo for the submodule
+        const submoduleRepo = await RepositoryInfo.createForPath(fullPath);
+        if (!submoduleRepo) {
+            info(`Failed to open submodule at ${submodulePath}`);
+            return;
+        }
+
+        // Push current repo and relative path onto the parent stack
+        this.parentRepoStack.push({
+            repo: this.repo,
+            relativePath: this.relativePathFromRoot,
+        });
+
+        // Update the relative path from root
+        if (this.relativePathFromRoot) {
+            this.relativePathFromRoot =
+                `${this.relativePathFromRoot}/${submodulePath}`;
+        } else {
+            this.relativePathFromRoot = submodulePath;
+        }
+
+        // Switch to the submodule repo and update the selected repo
+        this.repo = submoduleRepo;
+        RepositoryInfo.setSelectedRepo(submoduleRepo);
+        this.reload();
+        this.moveCursorToIndex();
+    }
+    async navigateToParent() {
+        if (this.parentRepoStack.length === 0) {
+            info("Already at root repository");
+            return;
+        }
+
+        // Pop the parent repo and relative path from the stack
+        const parent = this.parentRepoStack.pop()!;
+
+        // Restore the relative path from the stack
+        this.relativePathFromRoot = parent.relativePath;
+
+        // Switch to the parent repo and update the selected repo
+        this.repo = parent.repo;
+        RepositoryInfo.setSelectedRepo(parent.repo);
+        this.reload();
+        this.moveCursorToIndex();
     }
     async resolveConflict() {
         const change = this.curChange;
@@ -1168,6 +1243,13 @@ class StGitDoc {
         this.moveCursorToIndexAtOpen(editor);
     }
 
+    private async moveCursorToIndex() {
+        const editor = this.editor;
+        if (!editor)
+            return;
+        this.moveCursorToIndexAtOpen(editor);
+    }
+
     private async moveCursorToIndexAtOpen(editor: vscode.TextEditor) {
         let done = false;
         const watcher = workspace.onDidChangeTextDocument((e) => {
@@ -1192,6 +1274,10 @@ class StGitDoc {
                 p => new vscode.Range(p.lineNum, 2, p.lineNum, 2));
         this.historyRanges = this.history.map(
             p => new vscode.Range(p.lineNum, 0, p.lineNum, 999));
+        // Submodule line is line 0 when inside a submodule
+        this.submoduleRanges = this.relativePathFromRoot
+            ? [new vscode.Range(0, 0, 0, 999)]
+            : [];
         this.updateEditorDecorations();
     }
 
@@ -1205,6 +1291,8 @@ class StGitDoc {
                 cls.fileHighlightDecoration, this.highlightRanges);
             editor.setDecorations(
                 cls.historyDecoration, this.historyRanges);
+            editor.setDecorations(
+                cls.submoduleDecoration, this.submoduleRanges);
         }
     }
 
@@ -1251,7 +1339,12 @@ class StGitDoc {
 
     get documentContents(): string {
         const b = this.branchName ?? this.baseSha?.slice(0, 16) ?? "<unknown>";
-        const lines = [`Branch: ${b}${this.upstreamString}`, ""];
+        const branchLine = `Branch: ${b}${this.upstreamString}`;
+        const lines: string[] = [];
+        if (this.relativePathFromRoot) {
+            lines.push(`Submodule: ${this.relativePathFromRoot}`);
+        }
+        lines.push(branchLine, "");
         function pushVec(patches: Patch[]) {
             for (const p of patches) {
                 const patchLines = p.getLines();
@@ -1293,6 +1386,11 @@ class StGitMode {
     readonly historyDecoration = window.createTextEditorDecorationType({
         dark: { color: "#777", },
         light: { color: "#999", },
+    });
+    readonly submoduleDecoration = window.createTextEditorDecorationType({
+        dark: { color: "#4EC9B0", },  // Teal/cyan color
+        light: { color: "#16825D", }, // Darker green for light themes
+        fontStyle: "italic",
     });
     constructor(context: vscode.ExtensionContext) {
         const provider: vscode.TextDocumentContentProvider = {
@@ -1357,6 +1455,7 @@ class StGitMode {
             cmd('hardUndo', () => this.stgit?.hardUndo()),
             cmd('redo', () => this.stgit?.redo()),
             cmd('help', () => this.stgit?.help()),
+            cmd('navigateToParent', () => this.stgit?.navigateToParent()),
 
             workspace.registerTextDocumentContentProvider('stgit', provider),
 
@@ -1380,6 +1479,7 @@ class StGitMode {
 
         this.fileHighlightDecoration.dispose();
         this.historyDecoration.dispose();
+        this.submoduleDecoration.dispose();
     }
     private async openStgit() {
         if (this.stgit) {
@@ -1392,6 +1492,8 @@ class StGitMode {
                     return;
                 }
                 this.stgit.repo = repo;
+                RepositoryInfo.setSelectedRepo(repo);
+                await this.stgit.setupSubmoduleContext(repo);
             }
             this.stgit.focusWindow();
             this.stgit.reload();
@@ -1401,6 +1503,7 @@ class StGitMode {
                 info("Failed to find a GIT repository");
                 return;
             }
+            RepositoryInfo.setSelectedRepo(repo);
             const doc = await workspace.openTextDocument(this.uri);
             this.stgit = new StGitDoc(doc, repo,
                 () => this.changeEmitter.fire(doc.uri),

@@ -11,3 +11,9 @@ repository. Changes up to that version are documented in its
 [changelog](https://github.com/srydh/vscode-stgit/blob/main/CHANGELOG.md).
 
 ## [Unreleased]
+
+### Added
+- Add support for navigating into/out of submodules with "Enter" and "-" keys.
+
+### Changed
+- Let the user switch branch when only submodules are changed.
