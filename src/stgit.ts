@@ -1316,6 +1316,22 @@ class StGitDoc {
         this.submoduleRanges = this.relativePathFromRoot
             ? [new vscode.Range(0, 0, 0, 999)]
             : [];
+        // Also highlight [submodule] suffix on delta lines
+        for (const p of this.patches) {
+            if (p.lineCount <= 1)
+                continue;
+            for (let i = 0; i < p.deltas.length; i++) {
+                const d = p.deltas[i];
+                if (!d.isSubmodule)
+                    continue;
+                const line = p.lineNum + i + 1;
+                const col = d.docLine.indexOf('[submodule]');
+                if (col >= 0) {
+                    this.submoduleRanges.push(new vscode.Range(
+                        line, col, line, col + '[submodule]'.length));
+                }
+            }
+        }
         this.updateEditorDecorations();
     }
 
