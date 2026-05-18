@@ -1098,7 +1098,7 @@ class StGitDoc {
         this.repo = parent.repo;
         RepositoryInfo.setSelectedRepo(parent.repo);
         this.reload();
-        this.moveCursorToDelta(parent.submodulePath);
+        await this.moveCursorToDelta(parent.submodulePath);
     }
     async resolveConflict() {
         const change = this.curChange;
@@ -1255,55 +1255,64 @@ class StGitDoc {
         this.moveCursorToIndexAtOpen(editor);
     }
 
-    private moveCursorToDelta(path: string) {
+    private async moveCursorToDelta(path: string) {
         const editor = this.editor;
         if (!editor)
             return;
-        let done = false;
         // The work tree deltas may load after several document
         // updates, so keep trying on each update until found.
+        let resolve: () => void;
+        const found = new Promise<void>(r => { resolve = r; });
         const watcher = workspace.onDidChangeTextDocument((e) => {
-            if (e.document !== this.doc || done)
+            if (e.document !== this.doc)
                 return;
             for (const p of this.patches) {
                 const idx = p.deltas.findIndex(
                     d => d.path === path);
-                if (idx >= 0) {
-                    const line = p.lineNum + idx + 1;
-                    const pos = new vscode.Position(line, 0);
-                    editor.selection =
-                        new vscode.Selection(pos, pos);
-                    editor.revealRange(
-                        new vscode.Range(pos, pos));
-                    done = true;
-                    return;
+                if (idx < 0) {
+                    continue;
                 }
+                const line = p.lineNum + idx + 1;
+                const pos = new vscode.Position(line, 0);
+                editor.selection =
+                    new vscode.Selection(pos, pos);
+                editor.revealRange(
+                    new vscode.Range(pos, pos));
+                resolve();
+                return;
             }
         });
-        sleep(4000).then(() => {
-            watcher.dispose();
-            // Fall back to index if delta was never found
-            if (!done)
-                this.moveCursorToIndex();
-        });
+        const winner = await Promise.race([
+            found.then(() => 'found' as const),
+            sleep(4000).then(() => 'timeout' as const),
+        ]);
+        watcher.dispose();
+        if (winner === 'timeout')
+            this.moveCursorToIndex();
     }
 
     private async moveCursorToIndexAtOpen(editor: vscode.TextEditor) {
-        let done = false;
+        let resolve: () => void;
+        const found = new Promise<void>(r => { resolve = r; });
         const watcher = workspace.onDidChangeTextDocument((e) => {
-            if (e.document !== this.doc || done)
+            if (e.document !== this.doc)
                 return;
             const line = this.index.lineNum;
-            if (line !== 0) {
-                const p = new vscode.Position(line, 0);
-                editor.selection = new vscode.Selection(p, p);
-                editor.revealRange(new vscode.Range(p, p));
-                done = true;
+            if (line === 0) {
                 return;
             }
+            const p = new vscode.Position(line, 0);
+            editor.selection = new vscode.Selection(p, p);
+            editor.revealRange(new vscode.Range(p, p));
+            resolve();
         });
-        await sleep(4000);
+        const winner = await Promise.race([
+            found.then(() => 'found' as const),
+            sleep(4000).then(() => 'timeout' as const),
+        ]);
         watcher.dispose();
+        if (winner === 'timeout')
+            this.moveCursorToIndex();
     }
 
     private updateDecorations() {
