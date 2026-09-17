@@ -95,6 +95,10 @@
             "category": "StGit",
             "title": "Edit Commit Message"
         }, {
+            "command": "stgit.copyCommitSha",
+            "category": "StGit",
+            "title": "Copy Full Commit SHA"
+        }, {
             "command": "stgit.squashPatches",
             "category": "StGit",
             "title": "Squash Selected Patches"

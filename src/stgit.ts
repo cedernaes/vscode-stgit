@@ -666,6 +666,13 @@ class StGitDoc {
         const msg = await run('git', ['show', '-s', sha, '--format=%B']);
         this.openCommentEditor(p.lineNum, msg, "stgit-edit");
     }
+    async copyCommitSha() {
+        const sha = await this.curPatch?.getSha();
+        if (!sha)
+            return;
+        await vscode.env.clipboard.writeText(sha);
+        showStatusMessage(`Copied commit SHA ${sha}`);
+    }
     async commentCreatePatch() {
         if (this.commentThread) {
             const msg = this.commentThread.comments[0].body;
@@ -1503,6 +1510,7 @@ class StGitMode {
             cmd('completePatchEdit', () => this.stgit?.completePatchEdit()),
             cmd('cancel', () => this.stgit?.cancel()),
             cmd('editCommitMessage', () => this.stgit?.editCommitMessage()),
+            cmd('copyCommitSha', () => this.stgit?.copyCommitSha()),
             cmd('squashPatches', () => this.stgit?.squashPatches()),
             cmd('deletePatches', () => this.stgit?.deletePatches()),
             cmd('highlightFile', () => this.stgit?.highlightFile()),

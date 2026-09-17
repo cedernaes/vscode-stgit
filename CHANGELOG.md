@@ -14,6 +14,7 @@ repository. Changes up to that version are documented in its
 
 ### Added
 - Add support for navigating into/out of submodules with "Enter" and "-" keys.
+- Add a command for copying the commit SHA of the selected patch
 
 ### Changed
 - Let the user switch branch when only submodules are changed.
