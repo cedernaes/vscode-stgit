@@ -204,14 +204,27 @@ abstract class Patch {
     }
 }
 
+export function formatCommitDescription(
+    description: string, commitMessage: string,
+): string {
+    const hasBody = commitMessage.split(/\r?\n/).slice(1)
+        .some(line => line.trim() !== "");
+    return hasBody ? `${description} […]` : description;
+}
+
 class StGitPatch extends Patch {
-    static fromSeries(line: string): Patch {
+    static fromSeries(line: string, commitMessage: string): Patch {
         const empty = line[0] === '0';
         const kind = line[1] === '-' ? '-' : '+';
         const symbol = line[1] as '+' | '-' | '>';
-        const label = line.slice(2).split("#")[0].trim();
+        const sha = line.slice(3, 43);
+        const label = line.slice(44).split("#")[0].trim();
         const desc = (line.split("#")[1] ?? "").trim();
-        return new this(desc, label, kind, empty, symbol);
+        const patch = new this(
+            formatCommitDescription(desc, commitMessage),
+            label, kind, empty, symbol);
+        patch.sha = sha;
+        return patch;
     }
     protected async doFetchDetails(): Promise<void> {
         this.sha = await run('stg', ["id", "--", this.label]);
@@ -330,19 +343,20 @@ class History extends Patch {
         const format = await getHistoryFormat();
         const log = await run('git', [
             'log', '--reverse', '--first-parent', `-n${limit}`,
-            '--color=never', `--format=%H%x00${format}%x00`, rev]);
+            '--color=never',
+            `--format=%H%x00${format}%x00%B%x00`, rev]
+        );
         if (log === "")
             return [];
         const fields = log.split("\0");
         const history: History[] = [];
-        for (let i = 0; i + 1 < fields.length; i += 2) {
+        for (let i = 0; i + 2 < fields.length; i += 3) {
             const sha = fields[i].trim();
-            if (!sha)
-                continue;
-            const description = fields[i + 1]
-                .replace(/\r?\n/g, " ").trim();
+            const title = fields[i + 1].trim();
+            const description = fields[i + 2].trim();
             history.push(new History(
-                sha, description || sha.slice(0, 7)));
+                sha, formatCommitDescription(title, description)
+            ));
         }
         return history;
     }
@@ -471,7 +485,7 @@ class StGitDoc {
         const patches = [];
 
         const result = await runCommand(
-            'stg', ['series', '-ae', '--description']);
+            'stg', ['series', '-ae', '--commit-id=40', '--description']);
 
         this.branchInitialized = result.ecode === 0;
         this.stgMissing = result.ecode < 0;
@@ -480,16 +494,27 @@ class StGitDoc {
             this.warnAboutMissingStGit();
         } else if (this.branchInitialized) {
             const work: Promise<void>[] = [];
-            for (const line of result.stdout.split("\n")) {
-                if (line) {
-                    const p = StGitPatch.fromSeries(line);
-                    const old = m.get(p.label);
-                    if (old)
-                        work.push(p.updateFromOld(old));
-                    patches.push(p);
-                    if (this.highlightPaths)
-                        work.push(p.fetchDetails());
-                }
+            const lines = result.stdout.split("\n").filter(line => line);
+            const messagesBySha = new Map<string, string>();
+            if (lines.length) {
+                const output = await run('git', [
+                    'show', '-s', '--format=%H%x00%B%x00',
+                    ...lines.map(line => line.slice(3, 43)),
+                ]);
+                const fields = output.split("\0");
+                for (let i = 0; i + 1 < fields.length; i += 2)
+                    messagesBySha.set(fields[i].trim(), fields[i + 1]);
+            }
+            for (const line of lines) {
+                const sha = line.slice(3, 43);
+                const p = StGitPatch.fromSeries(
+                    line, messagesBySha.get(sha) ?? "");
+                const old = m.get(p.label);
+                if (old)
+                    work.push(p.updateFromOld(old));
+                patches.push(p);
+                if (this.highlightPaths)
+                    work.push(p.fetchDetails());
             }
             await Promise.all(work);
         }
