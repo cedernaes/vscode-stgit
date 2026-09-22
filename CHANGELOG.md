@@ -24,3 +24,4 @@ repository. Changes up to that version are documented in its
 
 ### Fixed
 - Refresh a stale diff after staging a hunk
+- Stabilize the cursor position after staging diff hunks

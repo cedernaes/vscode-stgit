@@ -159,11 +159,15 @@ class DiffProvider {
     }
 }
 
+export async function openDiffDocument(uri: vscode.Uri) {
+    const doc = await workspace.openTextDocument(uri);
+    return vscode.languages.setTextDocumentLanguage(doc, 'diff');
+}
+
 export async function openAndShowDiffDocument(
     uri: vscode.Uri, opts?: vscode.TextDocumentShowOptions
 ) {
-    const doc = await workspace.openTextDocument(uri);
-    const newDoc = await vscode.languages.setTextDocumentLanguage(doc, 'diff');
+    const newDoc = await openDiffDocument(uri);
     await window.showTextDocument(newDoc, { preview: true, ...opts });
     return newDoc;
 }
