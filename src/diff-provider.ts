@@ -164,12 +164,18 @@ export async function openAndShowDiffDocument(
 ) {
     const doc = await workspace.openTextDocument(uri);
     const newDoc = await vscode.languages.setTextDocumentLanguage(doc, 'diff');
-    window.showTextDocument(newDoc, { preview: true, ...opts });
+    await window.showTextDocument(newDoc, { preview: true, ...opts });
     return newDoc;
 }
 
 export function refreshDiff(uri: vscode.Uri) {
     DiffProvider.instance?.changeEmitter.fire(uri);
+}
+
+export function getDiffContents(uri: vscode.Uri): Promise<string> {
+    const fragment = uri.fragment.replace(/,splits=[0-9;]*/, "");
+    return DiffProvider.instance?.provideDiff(uri.with({ fragment })) ??
+        Promise.resolve("");
 }
 
 export function registerDiffProvider(context: vscode.ExtensionContext) {
