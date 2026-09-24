@@ -17,6 +17,7 @@ repository. Changes up to that version are documented in its
 - Add a command for copying the commit SHA of the selected patch
 - Honour the effective `format.pretty` Git configuration in history entries
 - Show ellipses after commit titles that have a non-empty message body
+- Recognize renamed files and show the likeness in percent
 
 ### Changed
 - Let the user switch branch when only submodules are changed.

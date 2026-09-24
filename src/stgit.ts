@@ -10,7 +10,7 @@ import { uncommitFiles } from './git';
 import { RepositoryInfo } from './repo';
 import { getStGitConfig } from './config';
 
-const RENAMEOPTS: readonly string[] = ['--no-renames'];
+const RENAMEOPTS: readonly string[] = ['--find-renames'];
 
 interface IndexStageInfo {
     perm: string;
@@ -19,7 +19,7 @@ interface IndexStageInfo {
 }
 type DeltaKind = keyof (typeof Delta.STATUS_MESSAGE);
 
-class Delta {
+export class Delta {
     private indexStageInfo: IndexStageInfo[] = [];
 
     static readonly STATUS_MESSAGE = {
@@ -83,7 +83,8 @@ class Delta {
     }
     get docLine() {
         const what = Delta.STATUS_MESSAGE[this.status];
-        const s = `${what}${this.permissionDelta}`;
+        const similarity = this.status === 'R' ? ` ${Number(this.score)}%` : '';
+        const s = `${what}${similarity}${this.permissionDelta}`;
         const dest = this.destPath ? ` -> ${this.destPath}` : '';
         const submoduleMarker = this.isSubmodule ? ' [submodule]' : '';
         const s2 = `    ${s.padEnd(16)} ${this.path}${dest}${submoduleMarker}`;
@@ -234,7 +235,7 @@ class StGitPatch extends Patch {
     }
 }
 
-class WorkTree extends Patch {
+export class WorkTree extends Patch {
     constructor(
         private readonly unknownFilesVisible: boolean,
     ) {
@@ -246,20 +247,19 @@ class WorkTree extends Patch {
             return "";
         const unknownFiles = await run(
             'git', ['ls-files', '--exclude-standard', '-o', '-z']);
-        return unknownFiles.split("\0").filter(x => x).map(x => (
+        return unknownFiles.split("\0").filter(name => name).map(name => (
             ':000000 000000' +
             ' 0000000000000000000000000000000000000000' +
             ' 0000000000000000000000000000000000000000' +
-            ` O\0${x}\0`)).join("");
+            ` O\0${name}\0`)).join("");
     }
-
     protected async doFetchDetails(): Promise<void> {
         await run('git', ['update-index', '-q', '--refresh']);
         const result = await Promise.all([
-            run('git', ['diff-files', ...RENAMEOPTS, '-z', '-0']),
+            run('git', ['diff-files', '--no-renames', '-z', '-0']),
             this.fetchUnknownFiles(),
         ]);
-        this.deltas = Delta.fromDiff(result.join(""));
+        this.deltas = Delta.fromDiff(result.join(''));
     }
 }
 
@@ -846,7 +846,8 @@ class StGitDoc {
                 preview: true,
             };
             if (this.workTree.deltas.includes(delta)) {
-                dstUri = this.repo.getPathUri(delta.path);
+                dstUri = this.repo.getPathUri(
+                    delta.destPath ?? delta.path);
             }
             vscode.commands.executeCommand("vscode.diff",
                 srcUri, dstUri, `Diff ${delta.path}`, opts);
@@ -879,7 +880,8 @@ class StGitDoc {
         if (patch && sha) {
             const s = `${sha.slice(0, 5)}`;
             if (delta)
-                spec = `diff-${s}-${delta.path}#sha=${sha},file=${delta.path}`;
+                spec = `diff-${s}-${delta.path}#sha=${sha},file=${delta.path}` +
+                    (delta.destPath ? `,dest=${delta.destPath}` : '');
             else
                 spec = `diff-${s}#sha=${sha}`;
             invariant = true;   // Diff contents never changes
@@ -888,7 +890,8 @@ class StGitDoc {
                 const m = await this.selectMergeDiffMode(delta);
                 if (m === null)
                     return;
-                spec = `diff-index-${delta.path}#index,file=${delta.path}${m}`;
+                spec = `diff-index-${delta.path}#index,file=${delta.path}` +
+                    (delta.destPath ? `,dest=${delta.destPath}` : '') + m;
             } else {
                 spec = `diff-index#index`;
             }
@@ -1194,20 +1197,23 @@ class StGitDoc {
                 if (change.deleted)
                     await run('git', ['rm', '--', change.path]);
                 else
-                    await run('git', ['add', '--', change.path]);
+                    await run('git', ['add', '--', change.path,
+                        ...(change.destPath ? [change.destPath] : [])]);
             } else {
                 await run('git', ['add', '-u']);
             }
             this.reloadIndexAndWorkTree();
         } else if (patch?.kind == 'I') {
             if (change)
-                await run('git', ['restore', '-S', '--', change.path]);
+                await run('git', ['restore', '-S', '--', change.path,
+                    ...(change.destPath ? [change.destPath] : [])]);
             else
                 await run('git', ["reset", "HEAD"]);
             this.reloadIndexAndWorkTree();
         } else if (patch && patch === this.applied.at(-1)) {
             if (change)
-                await uncommitFiles([change.path]);
+                await uncommitFiles([change.path,
+                    ...(change.destPath ? [change.destPath] : [])]);
             else
                 await uncommitFiles();
             this.reload();

@@ -6,7 +6,7 @@ import { workspace, commands, window } from 'vscode';
 import { info } from './extension';
 import { run, runCommand } from './util';
 
-class DiffProvider {
+export class DiffProvider {
     static instance: DiffProvider | null = null;
     readonly changeEmitter = new vscode.EventEmitter<vscode.Uri>();
 
@@ -120,6 +120,7 @@ class DiffProvider {
         const index = d.has('index');
         const sha = d.get('sha');
         const file = d.get('file');
+        const dest = d.get('dest');
         const splits = d.get('splits');
         const diffmode = d.get('diffmode');
         const noTrim = { trim: false };
@@ -151,7 +152,8 @@ class DiffProvider {
             if (sha && !file)
                 header = run('git', ['show', '--stat', sha], noTrim);
             if (file)
-                diffArgs.push('--', file);
+                diffArgs.push(...(dest ? ['--find-renames'] : []),
+                    '--', file, ...(dest ? [dest] : []));
         }
         const diff = await run('git', ['diff', ...diffArgs], noTrim);
         const contents = header ? [await header, diff].join("\n") : diff;
