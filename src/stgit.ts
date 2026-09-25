@@ -261,9 +261,8 @@ export class WorkTree extends Patch {
             ` O\0${name}\0`)).join("");
     }
     protected async doFetchDetails(): Promise<void> {
-        await this.reader.run('git', ['update-index', '-q', '--refresh']);
         const result = await Promise.all([
-            this.reader.run('git', ['diff-files', '--no-renames', '-z', '-0']),
+            this.reader.run('git', ['diff', '--raw', '--no-renames', '-z']),
             this.fetchUnknownFiles(),
         ]);
         this.deltas = Delta.fromDiff(result.join(''));

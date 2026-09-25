@@ -19,6 +19,55 @@ suite('Rename Test Suite', () => {
             'Rename 91%       old.txt -> new.txt');
     });
 
+    test('Lists many worktree changes with one Git diff',
+        async () => {
+            const commands: string[] = [];
+            const diff = Array.from({ length: 60 }, (_, index) =>
+                `:100644 100644 abc123 def456 M\0file-${index}\0`)
+                .join('');
+            const reader = new RepoReader({ topLevelDir: '/repo' }, {
+                run: async (_command, args) => {
+                    commands.push(args[0]);
+                    return diff;
+                },
+                runCommand: async () => ({
+                    stdout: '', stderr: '', ecode: 0,
+                }),
+            });
+            const workTree = new WorkTree(reader, false);
+            await workTree.fetchDetails();
+            assert.strictEqual(workTree.deltas.length, 60);
+            assert.deepStrictEqual(commands, ['diff']);
+        });
+
+    test('Ignores metadata-only worktree changes', async () => {
+        const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'stgit-stat-'));
+        const git = (...args: string[]) => execFileSync('git', args, {
+            cwd: dir, encoding: 'utf8',
+        });
+        try {
+            git('init', '-q');
+            git('config', 'user.name', 'Test');
+            git('config', 'user.email', 'test@example.org');
+            await fs.writeFile(path.join(dir, 'untouched'), 'same\n');
+            await fs.writeFile(path.join(dir, 'edited'), 'before\n');
+            git('add', '.');
+            git('commit', '-qm', 'initial');
+            await fs.writeFile(path.join(dir, 'edited'), 'after\n');
+            const future = new Date(Date.now() + 10000);
+            await fs.utimes(path.join(dir, 'untouched'), future, future);
+
+            const reader = new RepoReader({ topLevelDir: dir },
+                { run, runCommand });
+            const workTree = new WorkTree(reader, false);
+            await workTree.fetchDetails();
+            assert.deepStrictEqual(workTree.deltas.map(delta => delta.path),
+                ['edited']);
+        } finally {
+            await fs.rm(dir, { recursive: true, force: true });
+        }
+    });
+
     test('Lists moves separately until staged or committed', async () => {
         const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'stgit-rename-'));
         const previousRepo = await RepositoryInfo.getSelectedRepo();
