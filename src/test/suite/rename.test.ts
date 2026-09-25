@@ -7,6 +7,8 @@ import * as vscode from 'vscode';
 import { Delta, WorkTree } from '../../stgit';
 import { DiffProvider } from '../../diff-provider';
 import { RepositoryInfo } from '../../repo';
+import { RepoReader } from '../../repo-reader';
+import { run, runCommand } from '../../util';
 
 suite('Rename Test Suite', () => {
     test('Displays renames with Git similarity scores', () => {
@@ -37,7 +39,8 @@ suite('Rename Test Suite', () => {
             assert.ok(repo);
             RepositoryInfo.setSelectedRepo(repo);
 
-            const workTree = new WorkTree(true);
+            const reader = new RepoReader(repo, { run, runCommand });
+            const workTree = new WorkTree(reader, true);
             await workTree.fetchDetails();
             assert.strictEqual(workTree.deltas.length, 3);
             assert.ok(workTree.deltas[0].docLine.includes('Deleted'));
@@ -46,7 +49,7 @@ suite('Rename Test Suite', () => {
             assert.ok(workTree.deltas[2].docLine.includes('other.txt'));
             assert.ok(workTree.deltas.every(
                 delta => !delta.docLine.includes('Rename')));
-            const hiddenWorkTree = new WorkTree(false);
+            const hiddenWorkTree = new WorkTree(reader, false);
             await hiddenWorkTree.fetchDetails();
             assert.strictEqual(hiddenWorkTree.deltas.length, 1);
             assert.strictEqual(git('diff', '--cached', '--name-only'), '');

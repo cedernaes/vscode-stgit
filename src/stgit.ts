@@ -11,6 +11,7 @@ import { RepositoryInfo } from './repo';
 import { getStGitConfig } from './config';
 import { StGitStateMonitor } from './state-monitor';
 import { RepositoryFollower } from './repository-follower';
+import { LatestLoad, RepoReader } from './repo-reader';
 
 const RENAMEOPTS: readonly string[] = ['--find-renames'];
 
@@ -139,6 +140,7 @@ abstract class Patch {
     lineCount = 0;
 
     constructor(
+        protected readonly reader: RepoReader,
         public readonly description: string,
         public readonly label: string,
         public readonly kind: '+' | '-' | 'H' | 'I' | 'W',
@@ -194,7 +196,7 @@ abstract class Patch {
         if (!this.commitMessage) {
             const sha = await this.getSha();
             if (sha) {
-                this.commitMessage = await run(
+                this.commitMessage = await this.reader.run(
                     'git', ['show', '-s', '--format=%B', sha]);
             }
         }
@@ -216,7 +218,9 @@ export function formatCommitDescription(
 }
 
 class StGitPatch extends Patch {
-    static fromSeries(line: string, commitMessage: string): Patch {
+    static fromSeries(
+        line: string, commitMessage: string, reader: RepoReader,
+    ): Patch {
         const empty = line[0] === '0';
         const kind = line[1] === '-' ? '-' : '+';
         const symbol = line[1] as '+' | '-' | '>';
@@ -224,14 +228,14 @@ class StGitPatch extends Patch {
         const label = line.slice(44).split("#")[0].trim();
         const desc = (line.split("#")[1] ?? "").trim();
         const patch = new this(
-            formatCommitDescription(desc, commitMessage),
+            reader, formatCommitDescription(desc, commitMessage),
             label, kind, empty, symbol);
         patch.sha = sha;
         return patch;
     }
     protected async doFetchDetails(): Promise<void> {
-        this.sha = await run('stg', ["id", "--", this.label]);
-        const tree = await run('git', ['diff-tree',
+        this.sha = await this.reader.run('stg', ["id", "--", this.label]);
+        const tree = await this.reader.run('git', ['diff-tree',
             ...RENAMEOPTS, '-z', '--no-commit-id', '-r', this.sha]);
         this.deltas = Delta.fromDiff(tree);
     }
@@ -239,15 +243,16 @@ class StGitPatch extends Patch {
 
 export class WorkTree extends Patch {
     constructor(
+        reader: RepoReader,
         private readonly unknownFilesVisible: boolean,
     ) {
-        super("Work Tree", "", 'W', false);
+        super(reader, "Work Tree", "", 'W', false);
         this.expanded = true;
     }
     private async fetchUnknownFiles(): Promise<string> {
         if (!this.unknownFilesVisible)
             return "";
-        const unknownFiles = await run(
+        const unknownFiles = await this.reader.run(
             'git', ['ls-files', '--exclude-standard', '-o', '-z']);
         return unknownFiles.split("\0").filter(name => name).map(name => (
             ':000000 000000' +
@@ -256,9 +261,9 @@ export class WorkTree extends Patch {
             ` O\0${name}\0`)).join("");
     }
     protected async doFetchDetails(): Promise<void> {
-        await run('git', ['update-index', '-q', '--refresh']);
+        await this.reader.run('git', ['update-index', '-q', '--refresh']);
         const result = await Promise.all([
-            run('git', ['diff-files', '--no-renames', '-z', '-0']),
+            this.reader.run('git', ['diff-files', '--no-renames', '-z', '-0']),
             this.fetchUnknownFiles(),
         ]);
         this.deltas = Delta.fromDiff(result.join(''));
@@ -266,18 +271,18 @@ export class WorkTree extends Patch {
 }
 
 class Index extends Patch {
-    constructor() {
-        super("Index", "", 'I', false);
+    constructor(reader: RepoReader) {
+        super(reader, "Index", "", 'I', false);
         this.expanded = true;
     }
     protected async doFetchDetails(): Promise<void> {
-        const tree = await run(
+        const tree = await this.reader.run(
             'git', ['diff-index', ...RENAMEOPTS, '-z', '--cached', 'HEAD']);
         const deltas = Delta.fromDiff(tree);
 
         // Fetch information about index stages
         if (deltas.some(x => x.conflict)) {
-            const s = await run('git', ['ls-files', '-u', '-z']);
+            const s = await this.reader.run('git', ['ls-files', '-u', '-z']);
             const entries = s.split("\0");
             const regexp = /([0-9]*) ([0-9a-f]*) ([1-3]*)\t(.*)/;
             for (const d of deltas.filter(d => d.conflict)) {
@@ -301,8 +306,8 @@ class Index extends Patch {
 
 const DEFAULT_HISTORY_FORMAT = "%h   %s";
 
-async function getHistoryFormat(): Promise<string> {
-    let pretty = await run(
+async function getHistoryFormat(reader: RepoReader): Promise<string> {
+    let pretty = await reader.run(
         'git', ['config', '--get', 'format.pretty'],
         { inhibitLogging: true });
     for (let depth = 0; pretty && depth < 5; depth++) {
@@ -316,7 +321,7 @@ async function getHistoryFormat(): Promise<string> {
             return "%h %s";
         if (pretty === 'reference')
             return "%h (%s, %as)";
-        pretty = await run(
+        pretty = await reader.run(
             'git', ['config', '--get', `pretty.${pretty}`],
             { inhibitLogging: true });
     }
@@ -325,8 +330,8 @@ async function getHistoryFormat(): Promise<string> {
 
 class History extends Patch {
     protected sha: string;
-    constructor(sha: string, description: string) {
-        super(description, "", 'H', false);
+    constructor(reader: RepoReader, sha: string, description: string) {
+        super(reader, description, "", 'H', false);
         this.sha = sha;
     }
     getLines(): string[] {
@@ -335,15 +340,15 @@ class History extends Patch {
         return lines;
     }
     protected async doFetchDetails(): Promise<void> {
-        const tree = await run('git', ['diff-tree',
+        const tree = await this.reader.run('git', ['diff-tree',
             ...RENAMEOPTS, '-z', '--no-commit-id', '-r', this.sha]);
         this.deltas = Delta.fromDiff(tree);
     }
-    static async fromRev(rev: string, limit: number) {
+    static async fromRev(reader: RepoReader, rev: string, limit: number) {
         if (limit === 0)
             return [];
-        const format = await getHistoryFormat();
-        const log = await run('git', [
+        const format = await getHistoryFormat(reader);
+        const log = await reader.run('git', [
             'log', '--reverse', '--first-parent', `-n${limit}`,
             '--color=never',
             `--format=%H%x00${format}%x00%B%x00`, rev]
@@ -357,7 +362,7 @@ class History extends Patch {
             const title = fields[i + 1].trim();
             const description = fields[i + 2].trim();
             history.push(new History(
-                sha, formatCommitDescription(title, description)
+                reader, sha, formatCommitDescription(title, description)
             ));
         }
         return history;
@@ -367,17 +372,21 @@ class History extends Patch {
 class StGitDoc {
     private unknownFilesVisible = false;
     private monitor: StGitStateMonitor;
+    private reader: RepoReader;
+    private seriesLoad = new LatestLoad();
+    private changesLoad = new LatestLoad();
 
     private history: Patch[] = [];
     private applied: Patch[] = [];
     private popped: Patch[] = [];
-    private index: Patch = new Index();
-    private workTree: Patch = new WorkTree(this.unknownFilesVisible);
+    private index: Patch;
+    private workTree: Patch;
     private needRepair = false;
     private stgMissing = false;
     private branchInitialized = true;
     private warnedAboutMissingStgBinary = false;
     private historySize = 5;
+    private loadedHistorySize = 5;
     private branchName: string | null = null;
     private remoteName: string | null = null;
     private remoteBranch: string | null = null;
@@ -414,6 +423,9 @@ class StGitDoc {
         public notifyDirty: () => void,
         private commentController: vscode.CommentController,
     ) {
+        this.reader = new RepoReader(repo, { run, runCommand });
+        this.index = new Index(this.reader);
+        this.workTree = new WorkTree(this.reader, this.unknownFilesVisible);
         this.subscriptions.push(
             window.onDidChangeVisibleTextEditors(editors => {
                 this.updateEditorDecorations();
@@ -473,6 +485,8 @@ class StGitDoc {
         this.monitor.start();
     }
     dispose() {
+        this.seriesLoad.invalidate();
+        this.changesLoad.invalidate();
         this.monitor.dispose();
         this.subscriptions.forEach(s => s.dispose());
     }
@@ -508,7 +522,10 @@ class StGitDoc {
     ) {
         if (this.repo.gitDir === repo.gitDir)
             return;
+        this.seriesLoad.invalidate();
+        this.changesLoad.invalidate();
         this.repo = repo;
+        this.reader = new RepoReader(repo, { run, runCommand });
         RepositoryInfo.setSelectedRepo(repo);
         this.monitor.setRepository(repo);
         this.parentRepoStack = context.stack;
@@ -516,8 +533,8 @@ class StGitDoc {
         this.history = [];
         this.applied = [];
         this.popped = [];
-        this.index = new Index();
-        this.workTree = new WorkTree(this.unknownFilesVisible);
+        this.index = new Index(this.reader);
+        this.workTree = new WorkTree(this.reader, this.unknownFilesVisible);
         this.baseSha = null;
         this.branchName = null;
         this.remoteName = null;
@@ -531,149 +548,105 @@ class StGitDoc {
         this.reload();
     }
 
-    async reloadIndex() {
-        const repo = this.repo;
-        const index = new Index();
-        await index.updateFromOld(this.index);
-        await index.fetchDetails();
-        if (this.repo !== repo)
-            return;
-        this.index = index;
-        this.notifyDirty();
-    }
-    async reloadWorkTree() {
-        const repo = this.repo;
-        const workTree = new WorkTree(this.unknownFilesVisible);
-        await workTree.updateFromOld(this.workTree);
-        await workTree.fetchDetails();
-        if (this.repo !== repo)
-            return;
-        this.workTree = workTree;
-        this.notifyDirty();
-    }
-    async reloadPatches() {
-        const repo = this.repo;
-        const m = new Map(this.patches.map(p => [p.label, p]));
-        const patches = [];
-
-        const result = await runCommand(
-            'stg', ['series', '-ae', '--commit-id=40', '--description']);
-
-        if (this.repo !== repo)
-            return;
-        this.branchInitialized = result.ecode === 0;
-        this.stgMissing = result.ecode < 0;
-
-        if (this.stgMissing) {
-            this.warnAboutMissingStGit();
-        } else if (this.branchInitialized) {
-            const work: Promise<void>[] = [];
-            const lines = result.stdout.split("\n").filter(line => line);
-            const messagesBySha = new Map<string, string>();
-            if (lines.length) {
-                const output = await run('git', [
-                    'show', '-s', '--format=%H%x00%B%x00',
-                    ...lines.map(line => line.slice(3, 43)),
-                ]);
-                const fields = output.split("\0");
-                for (let i = 0; i + 1 < fields.length; i += 2)
-                    messagesBySha.set(fields[i].trim(), fields[i + 1]);
-            }
-            for (const line of lines) {
-                const sha = line.slice(3, 43);
-                const p = StGitPatch.fromSeries(
-                    line, messagesBySha.get(sha) ?? "");
-                const old = m.get(p.label);
-                if (old)
-                    work.push(p.updateFromOld(old));
-                patches.push(p);
-                if (this.highlightPaths)
-                    work.push(p.fetchDetails());
-            }
-            await Promise.all(work);
-        }
-        if (this.repo !== repo)
-            return;
-        this.popped = patches.filter(p => p.kind === '-');
-        this.applied = patches.filter(p => p.kind !== '-');
-        this.notifyDirty();
-    }
     reload() {
-        this.fetchBranchName();
-        this.fetchUpstreamSpec();
-        this.reloadPatches();
-        this.fetchHistory(this.historySize);
+        const reader = this.reader;
+        void this.seriesLoad.run(
+            () => this.readSeries(reader), state => {
+                this.branchName = state.branch || null;
+                if (!this.newUpstream) {
+                    const slash = state.upstream.indexOf('/');
+                    this.remoteName = state.upstream.slice(0, slash) ||
+                        this.remoteName;
+                    this.remoteBranch = state.upstream.slice(slash + 1) || null;
+                }
+                this.branchInitialized = state.series.ecode === 0;
+                this.stgMissing = state.series.ecode < 0;
+                if (this.stgMissing)
+                    this.warnAboutMissingStGit();
+                this.popped = state.patches.filter(p => p.kind === '-');
+                this.applied = state.patches.filter(p => p.kind !== '-');
+                this.baseSha = state.baseSha;
+                this.history = state.history;
+                this.loadedHistorySize = state.historySize;
+                this.needRepair = state.needRepair;
+                this.notifyDirty();
+            });
         this.reloadIndexAndWorkTree();
-        this.checkForRepair();
     }
+
+    private async readSeries(reader: RepoReader) {
+        const old = new Map(this.patches.map(p => [p.label, p]));
+        const [branch, upstream, series, base, top, gitHead] =
+            await Promise.all([
+                reader.run('git', ['symbolic-ref', '--short', 'HEAD']),
+                reader.run('git', [
+                    'rev-parse', '--abbrev-ref', '--symbolic-full-name',
+                    '@{upstream}'], { inhibitLogging: true }),
+                reader.runCommand('stg', [
+                    'series', '-ae', '--commit-id=40', '--description']),
+                reader.run('stg', ['id', '--', '{base}']),
+                reader.run('stg', ['top']),
+                reader.run('git', ['rev-parse', 'HEAD']),
+            ]);
+        const lines = series.ecode === 0 ?
+            series.stdout.split('\n').filter(line => line) : [];
+        const messagesBySha = new Map<string, string>();
+        if (lines.length) {
+            const output = await reader.run('git', [
+                'show', '-s', '--format=%H%x00%B%x00',
+                ...lines.map(line => line.slice(3, 43)),
+            ]);
+            const fields = output.split('\0');
+            for (let i = 0; i + 1 < fields.length; i += 2)
+                messagesBySha.set(fields[i].trim(), fields[i + 1]);
+        }
+        const patches = lines.map(line => {
+            const sha = line.slice(3, 43);
+            return StGitPatch.fromSeries(
+                line, messagesBySha.get(sha) ?? '', reader);
+        });
+        await Promise.all(patches.map(async patch => {
+            const previous = old.get(patch.label);
+            if (previous)
+                await patch.updateFromOld(previous);
+            if (this.highlightPaths)
+                await patch.fetchDetails();
+        }));
+        const baseSha = base || gitHead;
+        const historySize = this.historySize;
+        const [history, stgHead] = await Promise.all([
+            baseSha === this.baseSha && historySize === this.loadedHistorySize ?
+                Promise.resolve(this.history) :
+                History.fromRev(reader, baseSha, historySize),
+            reader.run('stg', ['id', '--', ...(top ? [top] : [])]),
+        ]);
+        return {
+            branch, upstream, series, patches, baseSha, history, historySize,
+            needRepair: stgHead !== gitHead && stgHead !== '',
+        };
+    }
+
     reloadIndexAndWorkTree() {
-        this.reloadIndex();
-        this.reloadWorkTree();
-    }
-    async fetchUpstreamSpec() {
-        if (this.newUpstream)
-            return;
-        const repo = this.repo;
-        const upstream = await run('git', [
-            'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
-            { inhibitLogging: true });
-        if (this.repo !== repo)
-            return;
-        const n = upstream.search("/");
-        const remote = upstream.slice(0, n) || this.remoteName;
-        const remoteBranch = upstream.slice(n + 1) || null;
-        if (this.remoteBranch !== remoteBranch || this.remoteName !== remote) {
-            this.remoteBranch = remoteBranch;
-            this.remoteName = remote;
+        const reader = this.reader;
+        const index = new Index(reader);
+        const workTree = new WorkTree(reader, this.unknownFilesVisible);
+        void this.changesLoad.run(async () => {
+            await Promise.all([
+                index.updateFromOld(this.index)
+                    .then(() => index.fetchDetails()),
+                workTree.updateFromOld(this.workTree)
+                    .then(() => workTree.fetchDetails()),
+            ]);
+            return { index, workTree };
+        }, state => {
+            this.index = state.index;
+            this.workTree = state.workTree;
             this.notifyDirty();
-        }
+        });
     }
-    async fetchBranchName() {
-        const repo = this.repo;
-        const branch = await run('git', ['symbolic-ref', '--short', 'HEAD']);
-        if (this.repo !== repo)
-            return;
-        if (branch != this.branchName) {
-            this.branchName = branch === "" ? null : branch;
-            this.notifyDirty();
-        }
-    }
-    async fetchHistory(historySize: number) {
-        const repo = this.repo;
-        let sha = await run('stg', ['id', '--', '{base}']);
-        if (this.repo !== repo)
-            return;
-        if (sha === '')
-            sha = await run('git', ['rev-parse', 'HEAD']);
-        if (this.repo !== repo)
-            return;
-        if (sha !== this.baseSha || this.historySize !== historySize) {
-            const history = await History.fromRev(sha, historySize);
-            if (this.repo !== repo)
-                return;
-            this.baseSha = sha;
-            this.historySize = historySize;
-            this.history = history;
-            this.notifyDirty();
-        }
-    }
-    async checkForRepair() {
-        const repo = this.repo;
-        const top = await run('stg', ['top']);
-        if (this.repo !== repo)
-            return;
-        const topArgs = top.length ? [top] : [];
-        const stgHeadPromise = run('stg', ['id', '--', ...topArgs]);
-        const gitHeadPromise = run('git', ['rev-parse', 'HEAD']);
-        const stgHead = await stgHeadPromise;
-        const gitHead = await gitHeadPromise;
-        if (this.repo !== repo)
-            return;
-        const needRepair = (stgHead !== gitHead) && stgHead !== '';
-        if (this.needRepair !== needRepair) {
-            this.needRepair = needRepair;
-            this.notifyDirty();
-        }
+
+    reloadWorkTree() {
+        this.reloadIndexAndWorkTree();
     }
     warnAboutMissingStGit() {
         if (!this.warnedAboutMissingStgBinary) {
@@ -1346,8 +1319,8 @@ class StGitDoc {
             placeHolder: "Specify Git history size",
         });
         if (numStr) {
-            const historySize = parseInt(numStr);
-            this.fetchHistory(historySize);
+            this.historySize = parseInt(numStr);
+            this.reload();
         }
     }
     async commitOrUncommitPatches() {
@@ -1361,8 +1334,7 @@ class StGitDoc {
         } else {
             return;
         }
-        this.reloadPatches();
-        this.fetchHistory(this.historySize);
+        this.reload();
     }
     toggleShowingUnknownFiles() {
         this.unknownFilesVisible = !this.unknownFilesVisible;
