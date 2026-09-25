@@ -9,6 +9,7 @@ import { log, info, showStatusMessage, getUserConfirmation } from './extension';
 import { uncommitFiles } from './git';
 import { RepositoryInfo } from './repo';
 import { getStGitConfig } from './config';
+import { StGitStateMonitor } from './state-monitor';
 
 const RENAMEOPTS: readonly string[] = ['--find-renames'];
 
@@ -364,6 +365,7 @@ class History extends Patch {
 
 class StGitDoc {
     private unknownFilesVisible = false;
+    private monitor: StGitStateMonitor;
 
     private history: Patch[] = [];
     private applied: Patch[] = [];
@@ -438,8 +440,39 @@ class StGitDoc {
         this.setupSubmoduleContext(repo);
         this.reload();
         this.openInitialEditor();
+        this.monitor = new StGitStateMonitor(repo, {
+            readState: async currentRepo => {
+                const [series, status] = await Promise.all([
+                    runCommand('stg', ['series', '-ae', '--commit-id=40',
+                        '--description'], {
+                        cwd: currentRepo.topLevelDir, inhibitLogging: true,
+                    }),
+                    runCommand('git', ['status', '--porcelain=v2', '-b'], {
+                        cwd: currentRepo.topLevelDir, inhibitLogging: true,
+                    }),
+                ]);
+                return JSON.stringify([
+                    currentRepo.gitDir, series.ecode, series.stdout,
+                    status.ecode, status.stdout,
+                ]);
+            },
+            watchFiles: (currentRepo, changed) => {
+                const watcher = workspace.createFileSystemWatcher(
+                    new vscode.RelativePattern(
+                        currentRepo.topLevelDir, '**/*'));
+                const onChange = (uri: vscode.Uri) => changed(uri.fsPath);
+                watcher.onDidChange(onChange);
+                watcher.onDidCreate(onChange);
+                watcher.onDidDelete(onChange);
+                return watcher;
+            },
+            reload: () => this.reload(),
+            reloadWorkTree: () => this.reloadIndexAndWorkTree(),
+        });
+        this.monitor.start();
     }
     dispose() {
+        this.monitor.dispose();
         this.subscriptions.forEach(s => s.dispose());
     }
 
