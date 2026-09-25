@@ -21,11 +21,27 @@ export class StGitStateMonitor {
     private disposed = false;
 
     constructor(
-        private readonly repo: MonitoredRepository,
+        private repo: MonitoredRepository,
         private readonly sources: StateMonitorSources,
     ) { }
 
     start() {
+        this.watchFiles();
+        this.interval = setInterval(() => { void this.check(); }, 2500);
+    }
+
+    setRepository(repo: MonitoredRepository) {
+        if (this.repo.gitDir === repo.gitDir)
+            return;
+        this.repo = repo;
+        this.snapshot = null;
+        this.watchFiles();
+    }
+
+    private watchFiles() {
+        this.watcher?.dispose();
+        if (this.workTreeTimer)
+            clearTimeout(this.workTreeTimer);
         const repo = this.repo;
         this.watcher = this.sources.watchFiles(repo, file => {
             if (file === repo.gitDir ||
@@ -34,20 +50,20 @@ export class StGitStateMonitor {
             if (this.workTreeTimer)
                 clearTimeout(this.workTreeTimer);
             this.workTreeTimer = setTimeout(() => {
-                if (!this.disposed)
+                if (!this.disposed && this.repo === repo)
                     this.sources.reloadWorkTree();
             }, 250);
         });
-        this.interval = setInterval(() => { void this.check(); }, 2500);
     }
 
     async check() {
         if (this.checking || this.disposed)
             return;
         this.checking = true;
+        const repo = this.repo;
         try {
-            const snapshot = await this.sources.readState(this.repo);
-            if (this.disposed)
+            const snapshot = await this.sources.readState(repo);
+            if (this.disposed || this.repo !== repo)
                 return;
             if (this.snapshot !== null && this.snapshot !== snapshot)
                 this.sources.reload();

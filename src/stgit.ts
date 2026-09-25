@@ -10,6 +10,7 @@ import { uncommitFiles } from './git';
 import { RepositoryInfo } from './repo';
 import { getStGitConfig } from './config';
 import { StGitStateMonitor } from './state-monitor';
+import { RepositoryFollower } from './repository-follower';
 
 const RENAMEOPTS: readonly string[] = ['--find-renames'];
 
@@ -495,31 +496,71 @@ class StGitDoc {
     async setupSubmoduleContext(repo: RepositoryInfo) {
         const { stack, relativePath } =
             await RepositoryInfo.buildParentStack(repo);
+        if (this.repo !== repo)
+            return;
         this.parentRepoStack = stack;
         this.relativePathFromRoot = relativePath;
     }
 
+    switchRepository(
+        repo: RepositoryInfo,
+        context: Awaited<ReturnType<typeof RepositoryInfo.buildParentStack>>,
+    ) {
+        if (this.repo.gitDir === repo.gitDir)
+            return;
+        this.repo = repo;
+        RepositoryInfo.setSelectedRepo(repo);
+        this.monitor.setRepository(repo);
+        this.parentRepoStack = context.stack;
+        this.relativePathFromRoot = context.relativePath;
+        this.history = [];
+        this.applied = [];
+        this.popped = [];
+        this.index = new Index();
+        this.workTree = new WorkTree(this.unknownFilesVisible);
+        this.baseSha = null;
+        this.branchName = null;
+        this.remoteName = null;
+        this.remoteBranch = null;
+        this.newUpstream = false;
+        this.needRepair = false;
+        this.stgMissing = false;
+        this.branchInitialized = true;
+        this.highlightPaths = null;
+        this.notifyDirty();
+        this.reload();
+    }
+
     async reloadIndex() {
+        const repo = this.repo;
         const index = new Index();
         await index.updateFromOld(this.index);
         await index.fetchDetails();
+        if (this.repo !== repo)
+            return;
         this.index = index;
         this.notifyDirty();
     }
     async reloadWorkTree() {
+        const repo = this.repo;
         const workTree = new WorkTree(this.unknownFilesVisible);
         await workTree.updateFromOld(this.workTree);
         await workTree.fetchDetails();
+        if (this.repo !== repo)
+            return;
         this.workTree = workTree;
         this.notifyDirty();
     }
     async reloadPatches() {
+        const repo = this.repo;
         const m = new Map(this.patches.map(p => [p.label, p]));
         const patches = [];
 
         const result = await runCommand(
             'stg', ['series', '-ae', '--commit-id=40', '--description']);
 
+        if (this.repo !== repo)
+            return;
         this.branchInitialized = result.ecode === 0;
         this.stgMissing = result.ecode < 0;
 
@@ -551,6 +592,8 @@ class StGitDoc {
             }
             await Promise.all(work);
         }
+        if (this.repo !== repo)
+            return;
         this.popped = patches.filter(p => p.kind === '-');
         this.applied = patches.filter(p => p.kind !== '-');
         this.notifyDirty();
@@ -570,9 +613,12 @@ class StGitDoc {
     async fetchUpstreamSpec() {
         if (this.newUpstream)
             return;
+        const repo = this.repo;
         const upstream = await run('git', [
             'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
             { inhibitLogging: true });
+        if (this.repo !== repo)
+            return;
         const n = upstream.search("/");
         const remote = upstream.slice(0, n) || this.remoteName;
         const remoteBranch = upstream.slice(n + 1) || null;
@@ -583,31 +629,46 @@ class StGitDoc {
         }
     }
     async fetchBranchName() {
+        const repo = this.repo;
         const branch = await run('git', ['symbolic-ref', '--short', 'HEAD']);
+        if (this.repo !== repo)
+            return;
         if (branch != this.branchName) {
             this.branchName = branch === "" ? null : branch;
             this.notifyDirty();
         }
     }
     async fetchHistory(historySize: number) {
+        const repo = this.repo;
         let sha = await run('stg', ['id', '--', '{base}']);
+        if (this.repo !== repo)
+            return;
         if (sha === '')
             sha = await run('git', ['rev-parse', 'HEAD']);
+        if (this.repo !== repo)
+            return;
         if (sha !== this.baseSha || this.historySize !== historySize) {
+            const history = await History.fromRev(sha, historySize);
+            if (this.repo !== repo)
+                return;
             this.baseSha = sha;
             this.historySize = historySize;
-            this.history = await History.fromRev(
-                this.baseSha, this.historySize);
+            this.history = history;
             this.notifyDirty();
         }
     }
     async checkForRepair() {
+        const repo = this.repo;
         const top = await run('stg', ['top']);
+        if (this.repo !== repo)
+            return;
         const topArgs = top.length ? [top] : [];
         const stgHeadPromise = run('stg', ['id', '--', ...topArgs]);
         const gitHeadPromise = run('git', ['rev-parse', 'HEAD']);
         const stgHead = await stgHeadPromise;
         const gitHead = await gitHeadPromise;
+        if (this.repo !== repo)
+            return;
         const needRepair = (stgHead !== gitHead) && stgHead !== '';
         if (this.needRepair !== needRepair) {
             this.needRepair = needRepair;
@@ -1167,25 +1228,8 @@ class StGitDoc {
             return;
         }
 
-        // Push current repo and relative path onto the parent stack
-        this.parentRepoStack.push({
-            repo: this.repo,
-            relativePath: this.relativePathFromRoot,
-            submodulePath: submodulePath,
-        });
-
-        // Update the relative path from root
-        if (this.relativePathFromRoot) {
-            this.relativePathFromRoot =
-                `${this.relativePathFromRoot}/${submodulePath}`;
-        } else {
-            this.relativePathFromRoot = submodulePath;
-        }
-
-        // Switch to the submodule repo and update the selected repo
-        this.repo = submoduleRepo;
-        RepositoryInfo.setSelectedRepo(submoduleRepo);
-        this.reload();
+        const context = await RepositoryInfo.buildParentStack(submoduleRepo);
+        this.switchRepository(submoduleRepo, context);
         this.moveCursorToIndex();
     }
     async navigateToParent() {
@@ -1194,16 +1238,9 @@ class StGitDoc {
             return;
         }
 
-        // Pop the parent repo and relative path from the stack
-        const parent = this.parentRepoStack.pop()!;
-
-        // Restore the relative path from the stack
-        this.relativePathFromRoot = parent.relativePath;
-
-        // Switch to the parent repo and update the selected repo
-        this.repo = parent.repo;
-        RepositoryInfo.setSelectedRepo(parent.repo);
-        this.reload();
+        const parent = this.parentRepoStack.at(-1)!;
+        const context = await RepositoryInfo.buildParentStack(parent.repo);
+        this.switchRepository(parent.repo, context);
         await this.moveCursorToDelta(parent.submodulePath);
     }
     async resolveConflict() {
@@ -1551,6 +1588,14 @@ class StGitMode {
         'stgit.comments', "StGit");
 
     stgit: StGitDoc | null = null;
+    private repositoryFollower = new RepositoryFollower({
+        lookup: (directory: string) => RepositoryInfo.createForPath(directory),
+        current: () => this.stgit?.repo ?? null,
+        loadContext: repo => RepositoryInfo.buildParentStack(repo),
+        switchTo: (repo, context) => {
+            this.stgit?.switchRepository(repo, context);
+        },
+    });
 
     readonly fileHighlightDecoration = window.createTextEditorDecorationType({
         before: { contentText: "⏹ ", },
@@ -1634,6 +1679,7 @@ class StGitMode {
 
             workspace.onDidCloseTextDocument((doc) => {
                 if (doc === this.stgit?.doc) {
+                    this.repositoryFollower.cancel();
                     this.stgit.dispose();
                     this.stgit = null;
                 }
@@ -1641,9 +1687,15 @@ class StGitMode {
             workspace.onDidSaveTextDocument((doc) => {
                 this.stgit?.reloadWorkTree();
             }),
+            window.onDidChangeActiveTextEditor(editor => {
+                if (editor?.document.uri.scheme === 'file' && this.stgit)
+                    void this.repositoryFollower.followFile(
+                        editor.document.uri.fsPath);
+            }),
         );
     }
     dispose() {
+        this.repositoryFollower.cancel();
         this.stgit?.dispose();
         this.stgit = null;
         this.commentController.dispose();
@@ -1664,9 +1716,8 @@ class StGitMode {
                     info("Failed to find a GIT repository");
                     return;
                 }
-                this.stgit.repo = repo;
-                RepositoryInfo.setSelectedRepo(repo);
-                await this.stgit.setupSubmoduleContext(repo);
+                const context = await RepositoryInfo.buildParentStack(repo);
+                this.stgit.switchRepository(repo, context);
             }
             this.stgit.focusWindow();
             this.stgit.reload();

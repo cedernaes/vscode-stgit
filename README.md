@@ -21,6 +21,8 @@ as desired.
 
 The extension also provides an Emacs-like diff mode, which among other things allows individual hunks to be applied, staged or split into smaller hunks.
 
+While the StGit window is open, it follows the repository of the active file, including files in submodules.
+
 ![StGit](images/example.png)
 
 > Hint: To enter StGit, press `Ctrl-C Ctrl-I` or run the "`StGit: Open...`"

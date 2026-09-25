@@ -19,6 +19,7 @@ repository. Changes up to that version are documented in its
 - Show ellipses after commit titles that have a non-empty message body
 - Recognize renamed files and show the likeness in percent
 - Automatically reload StGit state after external changes
+- Follow the active repository in the StGit panel
 
 ### Changed
 - Let the user switch branch when only submodules are changed.
