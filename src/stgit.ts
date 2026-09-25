@@ -279,7 +279,8 @@ export class WorkTree extends Patch {
         reader: RepoReader,
         private readonly unknownFilesVisible: boolean,
     ) {
-        super(reader, "Work Tree", "", 'W', false);
+        super(reader, `Work Tree${unknownFilesVisible ? ' [+untracked]' : ''}`,
+            "", 'W', false);
         this.expanded = true;
     }
     private async fetchUnknownFiles(): Promise<string> {

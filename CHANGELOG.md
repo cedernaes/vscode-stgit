@@ -20,6 +20,7 @@ repository. Changes up to that version are documented in its
 - Recognize renamed files and show the likeness in percent
 - Automatically reload StGit state after external changes
 - Follow the active repository in the StGit panel
+- Indicate in the StGit buffer whether untracked files are shown
 
 ### Changed
 - Let the user switch branch when only submodules are changed.

@@ -32,12 +32,15 @@ suite('Extension Test Suite', () => {
             runCommand: async () => ({ stdout: '', stderr: '', ecode: 0 }),
         });
         const workTree = new WorkTree(reader, false);
-        assert.deepStrictEqual(workTree.getLines(), ['   ▾ Work Tree',
+        assert.deepStrictEqual(workTree.getLines(), [
+            '   ▾ Work Tree',
             '    <no files>']);
         await workTree.toggleExpanded();
-        assert.deepStrictEqual(workTree.getLines(), ['   ▸ Work Tree']);
+        assert.deepStrictEqual(workTree.getLines(), [
+            '   ▸ Work Tree']);
         await workTree.toggleExpanded();
-        assert.deepStrictEqual(workTree.getLines(), ['   ▾ Work Tree',
+        assert.deepStrictEqual(workTree.getLines(), [
+            '   ▾ Work Tree',
             '    <no files>']);
     });
 
