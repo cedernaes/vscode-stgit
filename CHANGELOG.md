@@ -26,6 +26,7 @@ repository. Changes up to that version are documented in its
 - Rename "StGit: Undo recent undo" command to "StGit: Redo Operation" to align with the stgit CLI
 - Avoid redundant StGit document updates during navigation
 - List worktree changes with a single raw Git diff
+- Make the folding mechanism more intuitive
 
 ### Fixed
 - Refresh a stale diff after staging a hunk

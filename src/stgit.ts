@@ -156,7 +156,10 @@ abstract class Patch {
     getLines(): string[] {
         const m = this.marked ? '*' : ' ';
         const empty = this.empty ? "(empty) " : "";
-        const lines = [`${this.symbol}${m}${empty}${this.description}`];
+        const caret = this.expanded ? '▾' : '▸';
+        const lines = [
+            `${this.symbol}${m} ${caret} ${empty}${this.description}`,
+        ];
         if (this.expanded) {
             for (const d of this.deltas)
                 lines.push(d.docLine);
@@ -1726,6 +1729,10 @@ class StGitMode {
             cmd('navigateToParent', () => this.stgit?.navigateToParent()),
 
             workspace.registerTextDocumentContentProvider('stgit', provider),
+            vscode.languages.registerFoldingRangeProvider(
+                { scheme: 'stgit', language: 'stgit.buffer' }, {
+                    provideFoldingRanges: () => [],
+                }),
 
             workspace.onDidCloseTextDocument((doc) => {
                 if (doc === this.stgit?.doc) {
@@ -1780,7 +1787,8 @@ class StGitMode {
                 return;
             }
             RepositoryInfo.setSelectedRepo(repo);
-            const doc = await workspace.openTextDocument(this.uri);
+            const doc = await vscode.languages.setTextDocumentLanguage(
+                await workspace.openTextDocument(this.uri), 'stgit.buffer');
             this.stgit = new StGitDoc(doc, repo,
                 () => {
                     if (this.stgit?.documentContents !== doc.getText())

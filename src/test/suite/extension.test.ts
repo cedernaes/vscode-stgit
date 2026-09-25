@@ -4,7 +4,10 @@ import * as assert from 'assert';
 // as well as import your extension to test it
 import * as vscode from 'vscode';
 import { findHunkTargetLine, HunkTarget } from '../../diff-mode';
-import { correspondingLine, formatCommitDescription } from '../../stgit';
+import { RepoReader } from '../../repo-reader';
+import {
+    correspondingLine, formatCommitDescription, WorkTree,
+} from '../../stgit';
 
 suite('Extension Test Suite', () => {
     vscode.window.showInformationMessage('Start all tests.');
@@ -21,6 +24,48 @@ suite('Extension Test Suite', () => {
         assert.strictEqual(
             formatCommitDescription('Title', 'Title\n\n   \n'),
             'Title');
+    });
+
+    test('Shows the work-tree expansion state in its header', async () => {
+        const reader = new RepoReader({ topLevelDir: '/repo' }, {
+            run: async () => '',
+            runCommand: async () => ({ stdout: '', stderr: '', ecode: 0 }),
+        });
+        const workTree = new WorkTree(reader, false);
+        assert.deepStrictEqual(workTree.getLines(), ['   ▾ Work Tree',
+            '    <no files>']);
+        await workTree.toggleExpanded();
+        assert.deepStrictEqual(workTree.getLines(), ['   ▸ Work Tree']);
+        await workTree.toggleExpanded();
+        assert.deepStrictEqual(workTree.getLines(), ['   ▾ Work Tree',
+            '    <no files>']);
+    });
+
+    test('Shows when untracked files are included, even when collapsed',
+        async () => {
+            const reader = new RepoReader({ topLevelDir: '/repo' }, {
+                run: async () => '',
+                runCommand: async () => ({ stdout: '', stderr: '', ecode: 0 }),
+            });
+            const workTree = new WorkTree(reader, true);
+            assert.deepStrictEqual(workTree.getLines(), [
+                '   ▾ Work Tree [+untracked]',
+                '    <no files>']);
+            await workTree.toggleExpanded();
+            assert.deepStrictEqual(workTree.getLines(), [
+                '   ▸ Work Tree [+untracked]']);
+        });
+
+    test('Disables native folding in the StGit document', async () => {
+        const extension = vscode.extensions.getExtension('samuelrydh.stgit');
+        assert.ok(extension);
+        await extension.activate();
+        const uri = vscode.Uri.from({ scheme: 'stgit', path: '/StGit' });
+        const doc = await vscode.workspace.openTextDocument(uri);
+        assert.strictEqual(doc.languageId, 'stgit.buffer');
+        const ranges = await vscode.commands.executeCommand<
+            vscode.FoldingRange[]>('vscode.executeFoldingRangeProvider', uri);
+        assert.deepStrictEqual(ranges, []);
     });
 
     test('Keeps the cursor on its file when a redraw changes line counts',

@@ -27,6 +27,11 @@
     "publisher": "cedernaes",
     "icon": "images/icon.png",
     "contributes": {
+        "configurationDefaults": {
+            "[stgit.buffer]": {
+                "editor.folding": false
+            }
+        },
         "configuration": {
             "title": "StGit",
             "properties": {
