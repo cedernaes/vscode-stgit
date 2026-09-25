@@ -361,7 +361,7 @@ async function getHistoryFormat(reader: RepoReader): Promise<string> {
     return DEFAULT_HISTORY_FORMAT;
 }
 
-class History extends Patch {
+export class History extends Patch {
     protected sha: string;
     constructor(reader: RepoReader, sha: string, description: string) {
         super(reader, description, "", 'H', false);
@@ -369,7 +369,7 @@ class History extends Patch {
     }
     getLines(): string[] {
         const lines = super.getLines();
-        lines[0] = this.description;
+        lines[0] = `${this.expanded ? '▾' : '▸'} ${this.description}`;
         return lines;
     }
     protected async doFetchDetails(): Promise<void> {

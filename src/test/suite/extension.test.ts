@@ -6,7 +6,7 @@ import * as vscode from 'vscode';
 import { findHunkTargetLine, HunkTarget } from '../../diff-mode';
 import { RepoReader } from '../../repo-reader';
 import {
-    correspondingLine, formatCommitDescription, WorkTree,
+    correspondingLine, formatCommitDescription, History, WorkTree,
 } from '../../stgit';
 
 suite('Extension Test Suite', () => {
@@ -58,6 +58,23 @@ suite('Extension Test Suite', () => {
             assert.deepStrictEqual(workTree.getLines(), [
                 '   ▸ Work Tree [+untracked]']);
         });
+
+    test('Shows the expansion state of committed history', async () => {
+        const reader = new RepoReader({ topLevelDir: '/repo' }, {
+            run: async (_command, args) => args[0] === 'log' ?
+                'fullsha\0abc12   Committed change\0Committed change\0' : '',
+            runCommand: async () => ({ stdout: '', stderr: '', ecode: 0 }),
+        });
+        const [commit] = await History.fromRev(reader, 'HEAD', 1);
+        assert.deepStrictEqual(commit.getLines(), [
+            '▸ abc12   Committed change']);
+        await commit.toggleExpanded();
+        assert.deepStrictEqual(commit.getLines(), [
+            '▾ abc12   Committed change', '    <no files>']);
+        await commit.toggleExpanded();
+        assert.deepStrictEqual(commit.getLines(), [
+            '▸ abc12   Committed change']);
+    });
 
     test('Disables native folding in the StGit document', async () => {
         const extension = vscode.extensions.getExtension('samuelrydh.stgit');

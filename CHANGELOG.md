@@ -21,6 +21,7 @@ repository. Changes up to that version are documented in its
 - Automatically reload StGit state after external changes
 - Follow the active repository in the StGit panel
 - Indicate in the StGit buffer whether untracked files are shown
+- Also show the expansion caret on committed rows
 
 ### Changed
 - Let the user switch branch when only submodules are changed.
