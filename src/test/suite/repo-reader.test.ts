@@ -2,6 +2,7 @@ import * as assert from 'assert';
 import { LatestLoad, RepoReader } from '../../repo-reader';
 
 suite('Repo-bound display loads', () => {
+    const unexpectedError = (error: unknown) => { assert.fail(String(error)); };
     test('uses the repository captured at construction', async () => {
         const calls: string[] = [];
         const repo = { topLevelDir: '/first' };
@@ -30,8 +31,9 @@ suite('Repo-bound display loads', () => {
         let finishOld: ((value: string) => void) | undefined;
         const old = gate.run(
             () => new Promise<string>(resolve => { finishOld = resolve; }),
-            value => shown.push(value));
-        await gate.run(async () => 'new', value => shown.push(value));
+            value => shown.push(value), unexpectedError);
+        await gate.run(async () => 'new', value => shown.push(value),
+            unexpectedError);
         finishOld!('old');
         await old;
         assert.deepStrictEqual(shown, ['new']);
@@ -39,7 +41,7 @@ suite('Repo-bound display loads', () => {
         let finishCurrent: ((value: string) => void) | undefined;
         const current = gate.run(
             () => new Promise<string>(resolve => { finishCurrent = resolve; }),
-            value => shown.push(value));
+            value => shown.push(value), unexpectedError);
         gate.invalidate();
         finishCurrent!('stale');
         await current;
@@ -63,11 +65,11 @@ suite('Repo-bound display loads', () => {
         const gate = new LatestLoad();
         const oldReader = new RepoReader({ topLevelDir: '/old' }, commands);
         const old = gate.run(() => oldReader.run('git', ['status']),
-            result => shown.push(result));
+            result => shown.push(result), unexpectedError);
         gate.invalidate();
         const newReader = new RepoReader({ topLevelDir: '/new' }, commands);
         await gate.run(() => newReader.run('git', ['status']),
-            result => shown.push(result));
+            result => shown.push(result), unexpectedError);
         finishOld!('old result');
         await old;
         assert.deepStrictEqual(directories, ['/old', '/new']);

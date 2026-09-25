@@ -38,10 +38,73 @@ export class LatestLoad {
         this.version++;
     }
 
-    async run<T>(read: () => Promise<T>, publish: (value: T) => void) {
+    async run<T>(
+        read: () => Promise<T>,
+        publish: (value: T) => void,
+        onError: (error: unknown) => void,
+    ) {
         const version = ++this.version;
-        const value = await read();
+        let value: T;
+        try {
+            value = await read();
+        } catch (error) {
+            if (version === this.version)
+                onError(error);
+            return;
+        }
         if (version === this.version)
             publish(value);
+    }
+}
+
+export class RepoDisplayLoads {
+    private reader: RepoReader;
+    private readonly series = new LatestLoad();
+    private readonly changes = new LatestLoad();
+
+    constructor(
+        repo: { topLevelDir: string },
+        private readonly commands: {
+            run: typeof run;
+            runCommand: typeof runCommand;
+        },
+        private readonly onError: (
+            kind: 'series' | 'changes', error: unknown,
+        ) => void,
+    ) {
+        this.reader = new RepoReader(repo, commands);
+    }
+
+    get currentReader() {
+        return this.reader;
+    }
+
+    switchRepository(repo: { topLevelDir: string }) {
+        this.series.invalidate();
+        this.changes.invalidate();
+        this.reader = new RepoReader(repo, this.commands);
+    }
+
+    loadSeries<T>(
+        read: (reader: RepoReader) => Promise<T>,
+        publish: (value: T) => void,
+    ) {
+        const reader = this.reader;
+        return this.series.run(() => read(reader), publish,
+            error => this.onError('series', error));
+    }
+
+    loadChanges<T>(
+        read: (reader: RepoReader) => Promise<T>,
+        publish: (value: T) => void,
+    ) {
+        const reader = this.reader;
+        return this.changes.run(() => read(reader), publish,
+            error => this.onError('changes', error));
+    }
+
+    dispose() {
+        this.series.invalidate();
+        this.changes.invalidate();
     }
 }

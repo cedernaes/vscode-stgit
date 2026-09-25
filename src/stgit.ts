@@ -11,7 +11,7 @@ import { RepositoryInfo } from './repo';
 import { getStGitConfig } from './config';
 import { StGitStateMonitor } from './state-monitor';
 import { RepositoryFollower } from './repository-follower';
-import { LatestLoad, RepoReader } from './repo-reader';
+import { RepoDisplayLoads, RepoReader } from './repo-reader';
 
 const RENAMEOPTS: readonly string[] = ['--find-renames'];
 
@@ -372,9 +372,7 @@ class History extends Patch {
 class StGitDoc {
     private unknownFilesVisible = false;
     private monitor: StGitStateMonitor;
-    private reader: RepoReader;
-    private seriesLoad = new LatestLoad();
-    private changesLoad = new LatestLoad();
+    private displayLoads: RepoDisplayLoads;
 
     private history: Patch[] = [];
     private applied: Patch[] = [];
@@ -423,7 +421,9 @@ class StGitDoc {
         public notifyDirty: () => void,
         private commentController: vscode.CommentController,
     ) {
-        this.reader = new RepoReader(repo, { run, runCommand });
+        this.displayLoads = new RepoDisplayLoads(repo, { run, runCommand },
+            (kind, error) => log(`StGit ${kind} reload failed:`,
+                String(error)));
         this.index = new Index(this.reader);
         this.workTree = new WorkTree(this.reader, this.unknownFilesVisible);
         this.subscriptions.push(
@@ -485,10 +485,13 @@ class StGitDoc {
         this.monitor.start();
     }
     dispose() {
-        this.seriesLoad.invalidate();
-        this.changesLoad.invalidate();
+        this.displayLoads.dispose();
         this.monitor.dispose();
         this.subscriptions.forEach(s => s.dispose());
+    }
+
+    private get reader() {
+        return this.displayLoads.currentReader;
     }
 
     private get patches() {
@@ -522,10 +525,8 @@ class StGitDoc {
     ) {
         if (this.repo.gitDir === repo.gitDir)
             return;
-        this.seriesLoad.invalidate();
-        this.changesLoad.invalidate();
+        this.displayLoads.switchRepository(repo);
         this.repo = repo;
-        this.reader = new RepoReader(repo, { run, runCommand });
         RepositoryInfo.setSelectedRepo(repo);
         this.monitor.setRepository(repo);
         this.parentRepoStack = context.stack;
@@ -549,9 +550,8 @@ class StGitDoc {
     }
 
     reload() {
-        const reader = this.reader;
-        void this.seriesLoad.run(
-            () => this.readSeries(reader), state => {
+        void this.displayLoads.loadSeries(
+            reader => this.readSeries(reader), state => {
                 this.branchName = state.branch || null;
                 if (!this.newUpstream) {
                     const slash = state.upstream.indexOf('/');
@@ -627,10 +627,9 @@ class StGitDoc {
     }
 
     reloadIndexAndWorkTree() {
-        const reader = this.reader;
-        const index = new Index(reader);
-        const workTree = new WorkTree(reader, this.unknownFilesVisible);
-        void this.changesLoad.run(async () => {
+        void this.displayLoads.loadChanges(async reader => {
+            const index = new Index(reader);
+            const workTree = new WorkTree(reader, this.unknownFilesVisible);
             await Promise.all([
                 index.updateFromOld(this.index)
                     .then(() => index.fetchDetails()),
