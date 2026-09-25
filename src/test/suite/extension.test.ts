@@ -4,7 +4,7 @@ import * as assert from 'assert';
 // as well as import your extension to test it
 import * as vscode from 'vscode';
 import { findHunkTargetLine, HunkTarget } from '../../diff-mode';
-import { formatCommitDescription } from '../../stgit';
+import { correspondingLine, formatCommitDescription } from '../../stgit';
 
 suite('Extension Test Suite', () => {
     vscode.window.showInformationMessage('Start all tests.');
@@ -22,6 +22,23 @@ suite('Extension Test Suite', () => {
             formatCommitDescription('Title', 'Title\n\n   \n'),
             'Title');
     });
+
+    test('Keeps the cursor on its file when a redraw changes line counts',
+        () => {
+            const before = 'Branch\nIndex\n    Modified  file-a\nWork Tree';
+            const after = 'Branch\nIndex\n    Modified  file-b\n' +
+                '    Modified  file-a\nWork Tree';
+            assert.strictEqual(correspondingLine(before, after, 2), 3);
+            assert.strictEqual(correspondingLine(after, before, 3), 2);
+            assert.strictEqual(correspondingLine(before, before, 2), 2);
+            assert.strictEqual(correspondingLine(before, 'Branch\nIndex', 2),
+                1);
+            const repeated = 'Branch\nPatch A\n    file-a\n' +
+                'Patch B\n    file-a\nEnd';
+            const expanded = 'Branch\nPatch A\n    file-a\n' +
+                'Patch B\n    file-b\n    file-a\nEnd';
+            assert.strictEqual(correspondingLine(repeated, expanded, 4), 5);
+        });
 
     test('Finds the next split after hunks are recombined', () => {
         const lines = [

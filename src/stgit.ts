@@ -217,6 +217,36 @@ export function formatCommitDescription(
     return hasBody ? `${description} […]` : description;
 }
 
+export function correspondingLine(
+    previous: string, next: string, line: number,
+): number {
+    const oldLines = previous.split('\n');
+    const newLines = next.split('\n');
+    const text = oldLines[line];
+    if (text === undefined)
+        return Math.min(line, newLines.length - 1);
+    let prefix = 0;
+    while (prefix < oldLines.length && prefix < newLines.length &&
+        oldLines[prefix] === newLines[prefix])
+        prefix++;
+    if (line < prefix)
+        return line;
+    let suffix = 0;
+    while (suffix < oldLines.length - prefix &&
+        suffix < newLines.length - prefix &&
+        oldLines[oldLines.length - suffix - 1] ===
+            newLines[newLines.length - suffix - 1])
+        suffix++;
+    if (line >= oldLines.length - suffix)
+        return line + newLines.length - oldLines.length;
+    const matches = newLines.flatMap((value, index) =>
+        value === text ? [index] : []);
+    if (matches.length)
+        return matches.reduce((best, index) =>
+            Math.abs(index - line) < Math.abs(best - line) ? index : best);
+    return Math.min(line, newLines.length - 1);
+}
+
 class StGitPatch extends Patch {
     static fromSeries(
         line: string, commitMessage: string, reader: RepoReader,
@@ -1554,6 +1584,11 @@ class StGitMode {
     static instance: StGitMode | null;
 
     private changeEmitter = new vscode.EventEmitter<vscode.Uri>();
+    private pendingSelections = new Map<vscode.TextEditor, {
+        previous: string;
+        next: string;
+        selections: readonly vscode.Selection[];
+    }>();
     private commentController = vscode.comments.createCommentController(
         'stgit.comments', "StGit");
 
@@ -1583,7 +1618,20 @@ class StGitMode {
         const provider: vscode.TextDocumentContentProvider = {
             onDidChange: this.changeEmitter.event,
             provideTextDocumentContent: (uri: vscode.Uri, token) => {
-                return this.stgit?.documentContents ?? "\nIndex\n";
+                const next = this.stgit?.documentContents ?? "\nIndex\n";
+                const doc = this.stgit?.doc;
+                if (doc && next !== doc.getText()) {
+                    this.pendingSelections.clear();
+                    for (const editor of window.visibleTextEditors) {
+                        if (editor.document === doc) {
+                            this.pendingSelections.set(editor, {
+                                previous: doc.getText(), next,
+                                selections: editor.selections,
+                            });
+                        }
+                    }
+                }
+                return next;
             }
         };
         function cmd(cmd: string, func: () => void) {
@@ -1594,6 +1642,38 @@ class StGitMode {
         }
         context.subscriptions.push(
             this,       /* self dispose */
+
+            window.onDidChangeTextEditorSelection(event => {
+                if (event.kind !== undefined) {
+                    const pending = this.pendingSelections.get(
+                        event.textEditor);
+                    if (pending)
+                        pending.selections = event.selections;
+                }
+            }),
+            workspace.onDidChangeTextDocument(event => {
+                if (event.document !== this.stgit?.doc)
+                    return;
+                for (const [editor, pending] of this.pendingSelections) {
+                    if (event.document.getText() !== pending.next)
+                        continue;
+                    editor.selections = pending.selections.map(selection => {
+                        const position = (point: vscode.Position) => {
+                            const line = correspondingLine(
+                                pending.previous, pending.next, point.line);
+                            const column = Math.min(point.character,
+                                event.document.lineAt(line).text.length);
+                            return new vscode.Position(line, column);
+                        };
+                        return new vscode.Selection(
+                            position(selection.anchor),
+                            position(selection.active));
+                    });
+                    editor.revealRange(editor.selection,
+                        vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+                    this.pendingSelections.delete(editor);
+                }
+            }),
 
             globalCmd('open', () => this.openStgit()),
             cmd('refresh', () => this.stgit?.refresh()),
@@ -1649,6 +1729,7 @@ class StGitMode {
 
             workspace.onDidCloseTextDocument((doc) => {
                 if (doc === this.stgit?.doc) {
+                    this.pendingSelections.clear();
                     this.repositoryFollower.cancel();
                     this.stgit.dispose();
                     this.stgit = null;
@@ -1665,6 +1746,7 @@ class StGitMode {
         );
     }
     dispose() {
+        this.pendingSelections.clear();
         this.repositoryFollower.cancel();
         this.stgit?.dispose();
         this.stgit = null;
