@@ -1701,7 +1701,10 @@ class StGitMode {
             RepositoryInfo.setSelectedRepo(repo);
             const doc = await workspace.openTextDocument(this.uri);
             this.stgit = new StGitDoc(doc, repo,
-                () => this.changeEmitter.fire(doc.uri),
+                () => {
+                    if (this.stgit?.documentContents !== doc.getText())
+                        this.changeEmitter.fire(doc.uri);
+                },
                 this.commentController);
         }
     }

@@ -24,6 +24,7 @@ repository. Changes up to that version are documented in its
 ### Changed
 - Let the user switch branch when only submodules are changed.
 - Rename "StGit: Undo recent undo" command to "StGit: Redo Operation" to align with the stgit CLI
+- Avoid redundant StGit document updates during navigation
 
 ### Fixed
 - Refresh a stale diff after staging a hunk
