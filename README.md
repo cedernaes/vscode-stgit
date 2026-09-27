@@ -31,6 +31,10 @@ operations.
 
 This extension requires StGit to be installed (the executable is called `stg`). The tool is available in most distributions (e.g. through "`brew install stgit`" on macOS). It can also be downloaded from GitHub [here](https://stacked-git.github.io).
 
+## Git History Format
+
+Git history entries use the effective `format.pretty` Git configuration. Custom `format:` and `tformat:` values and named `pretty.<name>` aliases are supported.  Multiline output is flattened to one line, and terminal colors are omitted. If no reusable one-line format is configured, the extension uses `%h   %s`.
+
 <!--
 ## Extension Settings
 

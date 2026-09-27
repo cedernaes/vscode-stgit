@@ -284,11 +284,40 @@ class Index extends Patch {
     }
 }
 
+const DEFAULT_HISTORY_FORMAT = "%h   %s";
+
+async function getHistoryFormat(): Promise<string> {
+    let pretty = await run(
+        'git', ['config', '--get', 'format.pretty'],
+        { inhibitLogging: true });
+    for (let depth = 0; pretty && depth < 5; depth++) {
+        if (pretty.startsWith('format:'))
+            return pretty.slice('format:'.length);
+        if (pretty.startsWith('tformat:'))
+            return pretty.slice('tformat:'.length);
+        if (pretty.includes('%'))
+            return pretty;
+        if (pretty === 'oneline')
+            return "%h %s";
+        if (pretty === 'reference')
+            return "%h (%s, %as)";
+        pretty = await run(
+            'git', ['config', '--get', `pretty.${pretty}`],
+            { inhibitLogging: true });
+    }
+    return DEFAULT_HISTORY_FORMAT;
+}
+
 class History extends Patch {
     protected sha: string;
     constructor(sha: string, description: string) {
         super(description, "", 'H', false);
         this.sha = sha;
+    }
+    getLines(): string[] {
+        const lines = super.getLines();
+        lines[0] = this.description;
+        return lines;
     }
     protected async doFetchDetails(): Promise<void> {
         const tree = await run('git', ['diff-tree',
@@ -298,15 +327,24 @@ class History extends Patch {
     static async fromRev(rev: string, limit: number) {
         if (limit === 0)
             return [];
+        const format = await getHistoryFormat();
         const log = await run('git', [
             'log', '--reverse', '--first-parent', `-n${limit}`,
-            '--format=%H\t%s', rev]);
+            '--color=never', `--format=%H%x00${format}%x00`, rev]);
         if (log === "")
             return [];
-        return log.split("\n").map(s => {
-            const [sha, desc] = s.split("\t");
-            return new History(sha, desc);
-        });
+        const fields = log.split("\0");
+        const history: History[] = [];
+        for (let i = 0; i + 1 < fields.length; i += 2) {
+            const sha = fields[i].trim();
+            if (!sha)
+                continue;
+            const description = fields[i + 1]
+                .replace(/\r?\n/g, " ").trim();
+            history.push(new History(
+                sha, description || sha.slice(0, 7)));
+        }
+        return history;
     }
 }
 

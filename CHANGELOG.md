@@ -15,6 +15,7 @@ repository. Changes up to that version are documented in its
 ### Added
 - Add support for navigating into/out of submodules with "Enter" and "-" keys.
 - Add a command for copying the commit SHA of the selected patch
+- Honour the effective `format.pretty` Git configuration in history entries
 
 ### Changed
 - Let the user switch branch when only submodules are changed.
