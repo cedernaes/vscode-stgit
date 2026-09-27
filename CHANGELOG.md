@@ -14,27 +14,30 @@ repository. Changes up to that version are documented in its
 
 ### Added
 
-- Add support for navigating into/out of submodules with "Enter" and "-" keys.
-- Add a command for copying the commit SHA of the selected patch
-- Honour the effective `format.pretty` Git configuration in history entries
-- Show ellipses after commit titles that have a non-empty message body
-- Recognize renamed files and show the likeness in percent
-- Automatically reload StGit state after external changes
-- Follow the active repository in the StGit panel
-- Indicate in the StGit buffer whether untracked files are shown
-- Also show the expansion caret on committed rows
+- Added support for navigating into and out of submodules with the "Enter" and "-" keys.
+- Added a command for copying the commit SHA of the selected patch.
+- History entries now honour the effective `format.pretty` Git configuration.
+- Commit titles are now followed by an ellipsis when the commit message has a non-empty body.
+- Renamed files are now recognized, and their similarity is shown in percent.
+- The StGit buffer is now reloaded automatically on external changes.
+- The StGit buffer now follows the active repository.
+- The StGit buffer now shows whether untracked files are shown.
+- Patches and history entries now show a caret (`▸`/`▾`) that make it clear whether they are expanded.
 
 ### Changed
 
 - **BREAKING:** The language of the StGit document was renamed from `stgit.buffer` to `stgit-buffer`, since VS Code fails to apply defaults to language IDs containing dots. Settings under `[stgit.buffer]` must be moved to `[stgit-buffer]`.
-- Let the user switch branch when only submodules are changed.
-- Rename "StGit: Undo recent undo" command to "StGit: Redo Operation" to align with the stgit CLI
-- Avoid redundant StGit document updates during navigation
-- List worktree changes with a single raw Git diff
-- Make the folding mechanism more intuitive
+- The "StGit: Undo Recent Undo" command was renamed to "StGit: Redo Operation" to align with the StGit CLI.
+- The force-push command is now titled "StGit: Push Changes (force)" to distinguish it from the regular push.
+- Worktree changes are now listed with a single `git diff --raw`, to improve performance.
 
 ### Fixed
 
-- Refresh a stale diff after staging a hunk
-- Stabilize the cursor position after staging diff hunks
-- Keep the StGit cursor on its row across redraws
+- A stale diff is now refreshed after staging a hunk, which previously could make splitting hunks use the wrong offset.
+- The cursor now stays on the current patch or file when the StGit buffer is redrawn, or near its previous position if the row is gone.
+- The StGit buffer is no longer redrawn when a reload leaves its contents unchanged, which previously could disturb cursor movement.
+- Native editor folding is now disabled in the StGit buffer, so patches can no longer be folded in a way that breaks expanding/collapsing them.
+
+## [Previous releases]
+
+See https://github.com/srydh/vscode-stgit for previous releases.
