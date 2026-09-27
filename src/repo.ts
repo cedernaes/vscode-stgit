@@ -1,8 +1,8 @@
 // Copyright (C) 2022-2023, Samuel Rydh <samuelrydh@gmail.com>
 // This code is licensed under the BSD 2-Clause license.
 
-import * as vscode from 'vscode';
-import { workspace } from 'vscode';
+import * as vscode from "vscode";
+import { workspace } from "vscode";
 import { run } from "./util";
 
 export class RepositoryInfo {
@@ -11,37 +11,31 @@ export class RepositoryInfo {
     private constructor(
         public readonly gitDir: string,
         public readonly topLevelDir: string,
-    ) { }
+    ) {}
 
     getPathUri(path: string): vscode.Uri {
         return vscode.Uri.joinPath(vscode.Uri.file(this.topLevelDir), path);
     }
 
     private static async findTopLevelDir(path: string) {
-        return await run('git', ['rev-parse', '--show-toplevel'], {
+        return await run("git", ["rev-parse", "--show-toplevel"], {
             cwd: path,
         });
     }
 
     private static async findSuperprojectDir(path: string) {
-        return await run('git', [
-            'rev-parse', '--show-superproject-working-tree',
-        ], { cwd: path, inhibitLogging: true });
+        return await run("git", ["rev-parse", "--show-superproject-working-tree"], { cwd: path, inhibitLogging: true });
     }
 
     private static async findGitDir(path: string) {
-        return await run('git', ['rev-parse', '--absolute-git-dir'], {
+        return await run("git", ["rev-parse", "--absolute-git-dir"], {
             cwd: path,
         });
     }
 
     private static async create(ws: string) {
-        const [topDir, gitDir] = await Promise.all([
-            this.findTopLevelDir(ws),
-            this.findGitDir(ws),
-        ]);
-        if (topDir && gitDir)
-            return new RepositoryInfo(gitDir, topDir);
+        const [topDir, gitDir] = await Promise.all([this.findTopLevelDir(ws), this.findGitDir(ws)]);
+        if (topDir && gitDir) return new RepositoryInfo(gitDir, topDir);
         return null;
     }
 
@@ -63,25 +57,20 @@ export class RepositoryInfo {
         const parents: RepositoryInfo[] = [];
         let current = repo;
         for (;;) {
-            const superDir = await this.findSuperprojectDir(
-                current.topLevelDir);
-            if (!superDir)
-                break;
+            const superDir = await this.findSuperprojectDir(current.topLevelDir);
+            if (!superDir) break;
             const parent = await this.create(superDir);
-            if (!parent)
-                break;
+            if (!parent) break;
             parents.push(parent);
             current = parent;
         }
-        if (parents.length === 0)
-            return { stack: [], relativePath: '' };
+        if (parents.length === 0) return { stack: [], relativePath: "" };
 
         // parents = [immediate parent, ..., root]
         // root is parents[parents.length - 1]
-        const path = require('path');
+        const path = require("path");
         const rootDir = parents[parents.length - 1].topLevelDir;
-        const relativePath = path.relative(
-            rootDir, repo.topLevelDir);
+        const relativePath = path.relative(rootDir, repo.topLevelDir);
 
         // Build the stack from root to immediate parent
         // Each entry's submodulePath is the path from that repo
@@ -89,14 +78,10 @@ export class RepositoryInfo {
         const chain = [...parents].reverse(); // [root, ..., immediate parent]
         const stack: { repo: RepositoryInfo; relativePath: string; submodulePath: string }[] = [];
         for (let i = 0; i < chain.length; i++) {
-            const child = (i + 1 < chain.length)
-                ? chain[i + 1] : repo;
+            const child = i + 1 < chain.length ? chain[i + 1] : repo;
             const p = chain[i];
-            const relPath = (p.topLevelDir === rootDir)
-                ? ''
-                : path.relative(rootDir, p.topLevelDir);
-            const subPath = path.relative(
-                p.topLevelDir, child.topLevelDir);
+            const relPath = p.topLevelDir === rootDir ? "" : path.relative(rootDir, p.topLevelDir);
+            const subPath = path.relative(p.topLevelDir, child.topLevelDir);
             stack.push({
                 repo: p,
                 relativePath: relPath,
@@ -119,17 +104,14 @@ export class RepositoryInfo {
         // submodules resolve to the submodule's repo
         const activeEditor = vscode.window.activeTextEditor;
         let lookupPath: string | undefined;
-        if (activeEditor &&
-            activeEditor.document.uri.scheme === 'file') {
-            const path = require('path');
-            lookupPath = path.dirname(
-                activeEditor.document.uri.fsPath);
+        if (activeEditor && activeEditor.document.uri.scheme === "file") {
+            const path = require("path");
+            lookupPath = path.dirname(activeEditor.document.uri.fsPath);
         }
         if (!lookupPath) {
             lookupPath = workspace.workspaceFolders?.[0]?.uri.path;
         }
-        if (!lookupPath)
-            return null;
+        if (!lookupPath) return null;
 
         this.selectedRepo = this.create(lookupPath);
         return this.selectedRepo;

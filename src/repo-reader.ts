@@ -1,4 +1,4 @@
-import type { run, runCommand } from './util';
+import type { run, runCommand } from "./util";
 
 export class RepoReader {
     readonly cwd: string;
@@ -13,21 +13,12 @@ export class RepoReader {
         this.cwd = repo.topLevelDir;
     }
 
-    run(
-        command: Parameters<typeof run>[0],
-        args: string[],
-        opts?: Parameters<typeof run>[2],
-    ) {
+    run(command: Parameters<typeof run>[0], args: string[], opts?: Parameters<typeof run>[2]) {
         return this.commands.run(command, args, { ...opts, cwd: this.cwd });
     }
 
-    runCommand(
-        command: Parameters<typeof runCommand>[0],
-        args: string[],
-        opts?: Parameters<typeof runCommand>[2],
-    ) {
-        return this.commands.runCommand(command, args,
-            { ...opts, cwd: this.cwd });
+    runCommand(command: Parameters<typeof runCommand>[0], args: string[], opts?: Parameters<typeof runCommand>[2]) {
+        return this.commands.runCommand(command, args, { ...opts, cwd: this.cwd });
     }
 }
 
@@ -38,22 +29,16 @@ export class LatestLoad {
         this.version++;
     }
 
-    async run<T>(
-        read: () => Promise<T>,
-        publish: (value: T) => void,
-        onError: (error: unknown) => void,
-    ) {
+    async run<T>(read: () => Promise<T>, publish: (value: T) => void, onError: (error: unknown) => void) {
         const version = ++this.version;
         let value: T;
         try {
             value = await read();
         } catch (error) {
-            if (version === this.version)
-                onError(error);
+            if (version === this.version) onError(error);
             return;
         }
-        if (version === this.version)
-            publish(value);
+        if (version === this.version) publish(value);
     }
 }
 
@@ -68,9 +53,7 @@ export class RepoDisplayLoads {
             run: typeof run;
             runCommand: typeof runCommand;
         },
-        private readonly onError: (
-            kind: 'series' | 'changes', error: unknown,
-        ) => void,
+        private readonly onError: (kind: "series" | "changes", error: unknown) => void,
     ) {
         this.reader = new RepoReader(repo, commands);
     }
@@ -85,22 +68,22 @@ export class RepoDisplayLoads {
         this.reader = new RepoReader(repo, this.commands);
     }
 
-    loadSeries<T>(
-        read: (reader: RepoReader) => Promise<T>,
-        publish: (value: T) => void,
-    ) {
+    loadSeries<T>(read: (reader: RepoReader) => Promise<T>, publish: (value: T) => void) {
         const reader = this.reader;
-        return this.series.run(() => read(reader), publish,
-            error => this.onError('series', error));
+        return this.series.run(
+            () => read(reader),
+            publish,
+            (error) => this.onError("series", error),
+        );
     }
 
-    loadChanges<T>(
-        read: (reader: RepoReader) => Promise<T>,
-        publish: (value: T) => void,
-    ) {
+    loadChanges<T>(read: (reader: RepoReader) => Promise<T>, publish: (value: T) => void) {
         const reader = this.reader;
-        return this.changes.run(() => read(reader), publish,
-            error => this.onError('changes', error));
+        return this.changes.run(
+            () => read(reader),
+            publish,
+            (error) => this.onError("changes", error),
+        );
     }
 
     dispose() {

@@ -1,26 +1,26 @@
 // Copyright (C) 2022-2023, Samuel Rydh <samuelrydh@gmail.com>
 // This code is licensed under the BSD 2-Clause license.
 
-import * as vscode from 'vscode';
-import { workspace, window, commands } from 'vscode';
-import { openAndShowDiffDocument, refreshDiff } from './diff-provider';
-import { run, runAndReportErrors, runCommand, sleep } from './util';
-import { log, info, showStatusMessage, getUserConfirmation } from './extension';
-import { uncommitFiles } from './git';
-import { RepositoryInfo } from './repo';
-import { getStGitConfig } from './config';
-import { StGitStateMonitor } from './state-monitor';
-import { RepositoryFollower } from './repository-follower';
-import { RepoDisplayLoads, RepoReader } from './repo-reader';
+import * as vscode from "vscode";
+import { workspace, window, commands } from "vscode";
+import { openAndShowDiffDocument, refreshDiff } from "./diff-provider";
+import { run, runAndReportErrors, runCommand, sleep } from "./util";
+import { log, info, showStatusMessage, getUserConfirmation } from "./extension";
+import { uncommitFiles } from "./git";
+import { RepositoryInfo } from "./repo";
+import { getStGitConfig } from "./config";
+import { StGitStateMonitor } from "./state-monitor";
+import { RepositoryFollower } from "./repository-follower";
+import { RepoDisplayLoads, RepoReader } from "./repo-reader";
 
-const RENAMEOPTS: readonly string[] = ['--find-renames'];
+const RENAMEOPTS: readonly string[] = ["--find-renames"];
 
 interface IndexStageInfo {
     perm: string;
     sha: string;
-    stage: number
+    stage: number;
 }
-type DeltaKind = keyof (typeof Delta.STATUS_MESSAGE);
+type DeltaKind = keyof typeof Delta.STATUS_MESSAGE;
 
 export class Delta {
     private indexStageInfo: IndexStageInfo[] = [];
@@ -46,81 +46,69 @@ export class Delta {
         private readonly score: string,
         readonly path: string,
         readonly destPath: string | undefined,
-    ) { }
+    ) {}
 
     attachIndexStageInfo(stageInfo: IndexStageInfo[]) {
         this.indexStageInfo = stageInfo;
     }
 
     get deleted() {
-        return this.status.startsWith('D');
+        return this.status.startsWith("D");
     }
     get conflict() {
-        return this.status.startsWith('U');
+        return this.status.startsWith("U");
     }
     get isSubmodule() {
-        return this.srcMode === '160000' || this.destMode === '160000';
+        return this.srcMode === "160000" || this.destMode === "160000";
     }
     private get stageInfoString() {
-        if (!this.indexStageInfo.length)
-            return "";
-        const m = this.indexStageInfo.reduce(
-            (s, e) => s | (1 << (e.stage - 1)), 0);
-        if (m === 3)
-            return "(deleted by them)";
-        if (m === 5)
-            return "(deleted by us)";
-        if (m === 6)
-            return "(added by both)";
-        if (m === 7)
-            return "";
+        if (!this.indexStageInfo.length) return "";
+        const m = this.indexStageInfo.reduce((s, e) => s | (1 << (e.stage - 1)), 0);
+        if (m === 3) return "(deleted by them)";
+        if (m === 5) return "(deleted by us)";
+        if (m === 6) return "(added by both)";
+        if (m === 7) return "";
         return `(stage ${m})`;
     }
     private get permissionDelta(): string {
         const [sMode, dMode] = [this.srcMode, this.destMode];
-        if (this.status !== 'U' && sMode !== '100755' && dMode === '100755')
-            return " +x";
-        else if (sMode === '100755' && dMode === '100644')
-            return " -x";
+        if (this.status !== "U" && sMode !== "100755" && dMode === "100755") return " +x";
+        else if (sMode === "100755" && dMode === "100644") return " -x";
         return "";
     }
     get docLine() {
         const what = Delta.STATUS_MESSAGE[this.status];
-        const similarity = this.status === 'R' ? ` ${Number(this.score)}%` : '';
+        const similarity = this.status === "R" ? ` ${Number(this.score)}%` : "";
         const s = `${what}${similarity}${this.permissionDelta}`;
-        const dest = this.destPath ? ` -> ${this.destPath}` : '';
-        const submoduleMarker = this.isSubmodule ? ' [submodule]' : '';
+        const dest = this.destPath ? ` -> ${this.destPath}` : "";
+        const submoduleMarker = this.isSubmodule ? " [submodule]" : "";
         const s2 = `    ${s.padEnd(16)} ${this.path}${dest}${submoduleMarker}`;
         const sinfo = this.stageInfoString;
-        if (!sinfo && !dest && !submoduleMarker)
-            return s2;
+        if (!sinfo && !dest && !submoduleMarker) return s2;
         return `${s2.padEnd(50)} ${sinfo}`;
     }
     static fromDiff(diffOutput: string): Delta[] {
         const entries: Delta[] = [];
         for (let s = diffOutput; ;) {
-            const i0 = s.indexOf('\0');
+            const i0 = s.indexOf("\0");
             const spec = s.slice(1, i0);
             const [sMode, dMode, srcSha, destSha, status] = spec.split(" ");
 
-            const i1 = s.indexOf('\0', i0 + 1);
-            if (i1 < 0)
-                break;
+            const i1 = s.indexOf("\0", i0 + 1);
+            if (i1 < 0) break;
             const name = s.slice(i0 + 1, i1);
 
             let destName = undefined;
-            if (status[0] === 'R' || status[0] === 'C') {
-                const i2 = s.indexOf('\0', i1 + 1);
+            if (status[0] === "R" || status[0] === "C") {
+                const i2 = s.indexOf("\0", i1 + 1);
                 destName = s.slice(i1 + 1, i2);
                 s = s.slice(i2 + 1);
             } else {
                 s = s.slice(i1 + 1);
             }
             const score = status.slice(1);
-            const kind: DeltaKind = (status[0] in Delta.STATUS_MESSAGE) ?
-                status[0] as DeltaKind : 'X';
-            entries.push(new Delta(
-                sMode, dMode, srcSha, destSha, kind, score, name, destName));
+            const kind: DeltaKind = status[0] in Delta.STATUS_MESSAGE ? (status[0] as DeltaKind) : "X";
+            entries.push(new Delta(sMode, dMode, srcSha, destSha, kind, score, name, destName));
         }
         return entries;
     }
@@ -143,26 +131,22 @@ abstract class Patch {
         protected readonly reader: RepoReader,
         public readonly description: string,
         public readonly label: string,
-        public readonly kind: '+' | '-' | 'H' | 'I' | 'W',
+        public readonly kind: "+" | "-" | "H" | "I" | "W",
         public readonly empty: boolean,
         private readonly symbol: "+" | "-" | ">" | " " = " ",
-    ) { }
+    ) {}
 
     async updateFromOld(old: Patch) {
         this.marked = old.marked;
-        if (this.expanded !== old.expanded)
-            await this.toggleExpanded();
+        if (this.expanded !== old.expanded) await this.toggleExpanded();
     }
     getLines(): string[] {
-        const m = this.marked ? '*' : ' ';
+        const m = this.marked ? "*" : " ";
         const empty = this.empty ? "(empty) " : "";
-        const caret = this.expanded ? '▾' : '▸';
-        const lines = [
-            `${this.symbol}${m} ${caret} ${empty}${this.description}`,
-        ];
+        const caret = this.expanded ? "▾" : "▸";
+        const lines = [`${this.symbol}${m} ${caret} ${empty}${this.description}`];
         if (this.expanded) {
-            for (const d of this.deltas)
-                lines.push(d.docLine);
+            for (const d of this.deltas) lines.push(d.docLine);
             if (!this.deltas.length) {
                 lines.push("    <no files>");
             }
@@ -177,16 +161,14 @@ abstract class Patch {
     protected abstract doFetchDetails(): Promise<void>;
 
     setMarked(marked: boolean): boolean {
-        if (this.kind !== '+' && this.kind !== '-')
-            return false;
+        if (this.kind !== "+" && this.kind !== "-") return false;
         const changed = this.marked !== marked;
         this.marked = marked;
         return changed;
     }
 
     fetchDetails(): Promise<void> {
-        if (!this.detailsFetcher)
-            this.detailsFetcher = this.doFetchDetails();
+        if (!this.detailsFetcher) this.detailsFetcher = this.doFetchDetails();
         return this.detailsFetcher;
     }
 
@@ -199,8 +181,7 @@ abstract class Patch {
         if (!this.commitMessage) {
             const sha = await this.getSha();
             if (sha) {
-                this.commitMessage = await this.reader.run(
-                    'git', ['show', '-s', '--format=%B', sha]);
+                this.commitMessage = await this.reader.run("git", ["show", "-s", "--format=%B", sha]);
             }
         }
         return this.commitMessage;
@@ -212,64 +193,45 @@ abstract class Patch {
     }
 }
 
-export function formatCommitDescription(
-    description: string, commitMessage: string,
-): string {
-    const hasBody = commitMessage.split(/\r?\n/).slice(1)
-        .some(line => line.trim() !== "");
+export function formatCommitDescription(description: string, commitMessage: string): string {
+    const hasBody = commitMessage
+        .split(/\r?\n/)
+        .slice(1)
+        .some((line) => line.trim() !== "");
     return hasBody ? `${description} […]` : description;
 }
 
-export function correspondingLine(
-    previous: string, next: string, line: number,
-): number {
-    const oldLines = previous.split('\n');
-    const newLines = next.split('\n');
+export function correspondingLine(previous: string, next: string, line: number): number {
+    const oldLines = previous.split("\n");
+    const newLines = next.split("\n");
     const text = oldLines[line];
-    if (text === undefined)
-        return Math.min(line, newLines.length - 1);
+    if (text === undefined) return Math.min(line, newLines.length - 1);
     let prefix = 0;
-    while (prefix < oldLines.length && prefix < newLines.length &&
-        oldLines[prefix] === newLines[prefix])
-        prefix++;
-    if (line < prefix)
-        return line;
+    while (prefix < oldLines.length && prefix < newLines.length && oldLines[prefix] === newLines[prefix]) prefix++;
+    if (line < prefix) return line;
     let suffix = 0;
-    while (suffix < oldLines.length - prefix &&
-        suffix < newLines.length - prefix &&
-        oldLines[oldLines.length - suffix - 1] ===
-            newLines[newLines.length - suffix - 1])
-        suffix++;
-    if (line >= oldLines.length - suffix)
-        return line + newLines.length - oldLines.length;
-    const matches = newLines.flatMap((value, index) =>
-        value === text ? [index] : []);
-    if (matches.length)
-        return matches.reduce((best, index) =>
-            Math.abs(index - line) < Math.abs(best - line) ? index : best);
+    while (suffix < oldLines.length - prefix && suffix < newLines.length - prefix && oldLines[oldLines.length - suffix - 1] === newLines[newLines.length - suffix - 1]) suffix++;
+    if (line >= oldLines.length - suffix) return line + newLines.length - oldLines.length;
+    const matches = newLines.flatMap((value, index) => (value === text ? [index] : []));
+    if (matches.length) return matches.reduce((best, index) => (Math.abs(index - line) < Math.abs(best - line) ? index : best));
     return Math.min(line, newLines.length - 1);
 }
 
 class StGitPatch extends Patch {
-    static fromSeries(
-        line: string, commitMessage: string, reader: RepoReader,
-    ): Patch {
-        const empty = line[0] === '0';
-        const kind = line[1] === '-' ? '-' : '+';
-        const symbol = line[1] as '+' | '-' | '>';
+    static fromSeries(line: string, commitMessage: string, reader: RepoReader): Patch {
+        const empty = line[0] === "0";
+        const kind = line[1] === "-" ? "-" : "+";
+        const symbol = line[1] as "+" | "-" | ">";
         const sha = line.slice(3, 43);
         const label = line.slice(44).split("#")[0].trim();
         const desc = (line.split("#")[1] ?? "").trim();
-        const patch = new this(
-            reader, formatCommitDescription(desc, commitMessage),
-            label, kind, empty, symbol);
+        const patch = new this(reader, formatCommitDescription(desc, commitMessage), label, kind, empty, symbol);
         patch.sha = sha;
         return patch;
     }
     protected async doFetchDetails(): Promise<void> {
-        this.sha = await this.reader.run('stg', ["id", "--", this.label]);
-        const tree = await this.reader.run('git', ['diff-tree',
-            ...RENAMEOPTS, '-z', '--no-commit-id', '-r', this.sha]);
+        this.sha = await this.reader.run("stg", ["id", "--", this.label]);
+        const tree = await this.reader.run("git", ["diff-tree", ...RENAMEOPTS, "-z", "--no-commit-id", "-r", this.sha]);
         this.deltas = Delta.fromDiff(tree);
     }
 }
@@ -279,46 +241,39 @@ export class WorkTree extends Patch {
         reader: RepoReader,
         private readonly unknownFilesVisible: boolean,
     ) {
-        super(reader, `Work Tree${unknownFilesVisible ? ' [+untracked]' : ''}`,
-            "", 'W', false);
+        super(reader, `Work Tree${unknownFilesVisible ? " [+untracked]" : ""}`, "", "W", false);
         this.expanded = true;
     }
     private async fetchUnknownFiles(): Promise<string> {
-        if (!this.unknownFilesVisible)
-            return "";
-        const unknownFiles = await this.reader.run(
-            'git', ['ls-files', '--exclude-standard', '-o', '-z']);
-        return unknownFiles.split("\0").filter(name => name).map(name => (
-            ':000000 000000' +
-            ' 0000000000000000000000000000000000000000' +
-            ' 0000000000000000000000000000000000000000' +
-            ` O\0${name}\0`)).join("");
+        if (!this.unknownFilesVisible) return "";
+        const unknownFiles = await this.reader.run("git", ["ls-files", "--exclude-standard", "-o", "-z"]);
+        return unknownFiles
+            .split("\0")
+            .filter((name) => name)
+            .map((name) => ":000000 000000" + " 0000000000000000000000000000000000000000" + " 0000000000000000000000000000000000000000" + ` O\0${name}\0`)
+            .join("");
     }
     protected async doFetchDetails(): Promise<void> {
-        const result = await Promise.all([
-            this.reader.run('git', ['diff', '--raw', '--no-renames', '-z']),
-            this.fetchUnknownFiles(),
-        ]);
-        this.deltas = Delta.fromDiff(result.join(''));
+        const result = await Promise.all([this.reader.run("git", ["diff", "--raw", "--no-renames", "-z"]), this.fetchUnknownFiles()]);
+        this.deltas = Delta.fromDiff(result.join(""));
     }
 }
 
 class Index extends Patch {
     constructor(reader: RepoReader) {
-        super(reader, "Index", "", 'I', false);
+        super(reader, "Index", "", "I", false);
         this.expanded = true;
     }
     protected async doFetchDetails(): Promise<void> {
-        const tree = await this.reader.run(
-            'git', ['diff-index', ...RENAMEOPTS, '-z', '--cached', 'HEAD']);
+        const tree = await this.reader.run("git", ["diff-index", ...RENAMEOPTS, "-z", "--cached", "HEAD"]);
         const deltas = Delta.fromDiff(tree);
 
         // Fetch information about index stages
-        if (deltas.some(x => x.conflict)) {
-            const s = await this.reader.run('git', ['ls-files', '-u', '-z']);
+        if (deltas.some((x) => x.conflict)) {
+            const s = await this.reader.run("git", ["ls-files", "-u", "-z"]);
             const entries = s.split("\0");
             const regexp = /([0-9]*) ([0-9a-f]*) ([1-3]*)\t(.*)/;
-            for (const d of deltas.filter(d => d.conflict)) {
+            for (const d of deltas.filter((d) => d.conflict)) {
                 const indexStageInfo: IndexStageInfo[] = [];
                 for (const e of entries) {
                     const m = e.match(regexp);
@@ -340,23 +295,14 @@ class Index extends Patch {
 const DEFAULT_HISTORY_FORMAT = "%h   %s";
 
 async function getHistoryFormat(reader: RepoReader): Promise<string> {
-    let pretty = await reader.run(
-        'git', ['config', '--get', 'format.pretty'],
-        { inhibitLogging: true });
+    let pretty = await reader.run("git", ["config", "--get", "format.pretty"], { inhibitLogging: true });
     for (let depth = 0; pretty && depth < 5; depth++) {
-        if (pretty.startsWith('format:'))
-            return pretty.slice('format:'.length);
-        if (pretty.startsWith('tformat:'))
-            return pretty.slice('tformat:'.length);
-        if (pretty.includes('%'))
-            return pretty;
-        if (pretty === 'oneline')
-            return "%h %s";
-        if (pretty === 'reference')
-            return "%h (%s, %as)";
-        pretty = await reader.run(
-            'git', ['config', '--get', `pretty.${pretty}`],
-            { inhibitLogging: true });
+        if (pretty.startsWith("format:")) return pretty.slice("format:".length);
+        if (pretty.startsWith("tformat:")) return pretty.slice("tformat:".length);
+        if (pretty.includes("%")) return pretty;
+        if (pretty === "oneline") return "%h %s";
+        if (pretty === "reference") return "%h (%s, %as)";
+        pretty = await reader.run("git", ["config", "--get", `pretty.${pretty}`], { inhibitLogging: true });
     }
     return DEFAULT_HISTORY_FORMAT;
 }
@@ -364,39 +310,30 @@ async function getHistoryFormat(reader: RepoReader): Promise<string> {
 export class History extends Patch {
     protected sha: string;
     constructor(reader: RepoReader, sha: string, description: string) {
-        super(reader, description, "", 'H', false);
+        super(reader, description, "", "H", false);
         this.sha = sha;
     }
     getLines(): string[] {
         const lines = super.getLines();
-        lines[0] = `${this.expanded ? '▾' : '▸'} ${this.description}`;
+        lines[0] = `${this.expanded ? "▾" : "▸"} ${this.description}`;
         return lines;
     }
     protected async doFetchDetails(): Promise<void> {
-        const tree = await this.reader.run('git', ['diff-tree',
-            ...RENAMEOPTS, '-z', '--no-commit-id', '-r', this.sha]);
+        const tree = await this.reader.run("git", ["diff-tree", ...RENAMEOPTS, "-z", "--no-commit-id", "-r", this.sha]);
         this.deltas = Delta.fromDiff(tree);
     }
     static async fromRev(reader: RepoReader, rev: string, limit: number) {
-        if (limit === 0)
-            return [];
+        if (limit === 0) return [];
         const format = await getHistoryFormat(reader);
-        const log = await reader.run('git', [
-            'log', '--reverse', '--first-parent', `-n${limit}`,
-            '--color=never',
-            `--format=%H%x00${format}%x00%B%x00`, rev]
-        );
-        if (log === "")
-            return [];
+        const log = await reader.run("git", ["log", "--reverse", "--first-parent", `-n${limit}`, "--color=never", `--format=%H%x00${format}%x00%B%x00`, rev]);
+        if (log === "") return [];
         const fields = log.split("\0");
         const history: History[] = [];
         for (let i = 0; i + 2 < fields.length; i += 3) {
             const sha = fields[i].trim();
             const title = fields[i + 1].trim();
             const description = fields[i + 2].trim();
-            history.push(new History(
-                reader, sha, formatCommitDescription(title, description)
-            ));
+            history.push(new History(reader, sha, formatCommitDescription(title, description)));
         }
         return history;
     }
@@ -430,7 +367,7 @@ class StGitDoc {
         relativePath: string;
         submodulePath: string;
     }[] = [];
-    private relativePathFromRoot = '';
+    private relativePathFromRoot = "";
 
     // start of history
     private baseSha: string | null = null;
@@ -454,13 +391,11 @@ class StGitDoc {
         public notifyDirty: () => void,
         private commentController: vscode.CommentController,
     ) {
-        this.displayLoads = new RepoDisplayLoads(repo, { run, runCommand },
-            (kind, error) => log(`StGit ${kind} reload failed:`,
-                String(error)));
+        this.displayLoads = new RepoDisplayLoads(repo, { run, runCommand }, (kind, error) => log(`StGit ${kind} reload failed:`, String(error)));
         this.index = new Index(this.reader);
         this.workTree = new WorkTree(this.reader, this.unknownFilesVisible);
         this.subscriptions.push(
-            window.onDidChangeVisibleTextEditors(editors => {
+            window.onDidChangeVisibleTextEditors((editors) => {
                 this.updateEditorDecorations();
                 for (const e of editors) {
                     if (e.document === this.doc && e.viewColumn) {
@@ -469,43 +404,37 @@ class StGitDoc {
                     }
                 }
             }),
-            workspace.onDidChangeTextDocument(ev => {
-                if (ev.document === this.doc)
-                    this.updateEditorDecorations();
+            workspace.onDidChangeTextDocument((ev) => {
+                if (ev.document === this.doc) this.updateEditorDecorations();
             }),
             // this event fires when an entire tab group is added or removed
-            window.onDidChangeTextEditorViewColumn(ev => {
-                if (ev.textEditor.document === this.doc)
-                    this.mainViewColumn = ev.viewColumn;
+            window.onDidChangeTextEditorViewColumn((ev) => {
+                if (ev.textEditor.document === this.doc) this.mainViewColumn = ev.viewColumn;
             }),
             getStGitConfig().onDidChangeConfiguration(() => {
                 this.updateConfiguration({ reload: true });
-            })
+            }),
         );
         this.updateConfiguration({ reload: false });
         this.setupSubmoduleContext(repo);
         this.reload();
         this.openInitialEditor();
         this.monitor = new StGitStateMonitor(repo, {
-            readState: async currentRepo => {
+            readState: async (currentRepo) => {
                 const [series, status] = await Promise.all([
-                    runCommand('stg', ['series', '-ae', '--commit-id=40',
-                        '--description'], {
-                        cwd: currentRepo.topLevelDir, inhibitLogging: true,
+                    runCommand("stg", ["series", "-ae", "--commit-id=40", "--description"], {
+                        cwd: currentRepo.topLevelDir,
+                        inhibitLogging: true,
                     }),
-                    runCommand('git', ['status', '--porcelain=v2', '-b'], {
-                        cwd: currentRepo.topLevelDir, inhibitLogging: true,
+                    runCommand("git", ["status", "--porcelain=v2", "-b"], {
+                        cwd: currentRepo.topLevelDir,
+                        inhibitLogging: true,
                     }),
                 ]);
-                return JSON.stringify([
-                    currentRepo.gitDir, series.ecode, series.stdout,
-                    status.ecode, status.stdout,
-                ]);
+                return JSON.stringify([currentRepo.gitDir, series.ecode, series.stdout, status.ecode, status.stdout]);
             },
             watchFiles: (currentRepo, changed) => {
-                const watcher = workspace.createFileSystemWatcher(
-                    new vscode.RelativePattern(
-                        currentRepo.topLevelDir, '**/*'));
+                const watcher = workspace.createFileSystemWatcher(new vscode.RelativePattern(currentRepo.topLevelDir, "**/*"));
                 const onChange = (uri: vscode.Uri) => changed(uri.fsPath);
                 watcher.onDidChange(onChange);
                 watcher.onDidCreate(onChange);
@@ -520,7 +449,7 @@ class StGitDoc {
     dispose() {
         this.displayLoads.dispose();
         this.monitor.dispose();
-        this.subscriptions.forEach(s => s.dispose());
+        this.subscriptions.forEach((s) => s.dispose());
     }
 
     private get reader() {
@@ -528,36 +457,23 @@ class StGitDoc {
     }
 
     private get patches() {
-        return [
-            ...this.history,
-            ...this.applied,
-            this.index,
-            this.workTree,
-            ...this.popped,
-        ];
+        return [...this.history, ...this.applied, this.index, this.workTree, ...this.popped];
     }
     private updateConfiguration(opt: { reload: boolean }) {
         const config = getStGitConfig();
         this.unknownFilesVisible = config.showUnknownFiles;
-        if (opt.reload)
-            this.reload();
+        if (opt.reload) this.reload();
     }
 
     async setupSubmoduleContext(repo: RepositoryInfo) {
-        const { stack, relativePath } =
-            await RepositoryInfo.buildParentStack(repo);
-        if (this.repo !== repo)
-            return;
+        const { stack, relativePath } = await RepositoryInfo.buildParentStack(repo);
+        if (this.repo !== repo) return;
         this.parentRepoStack = stack;
         this.relativePathFromRoot = relativePath;
     }
 
-    switchRepository(
-        repo: RepositoryInfo,
-        context: Awaited<ReturnType<typeof RepositoryInfo.buildParentStack>>,
-    ) {
-        if (this.repo.gitDir === repo.gitDir)
-            return;
+    switchRepository(repo: RepositoryInfo, context: Awaited<ReturnType<typeof RepositoryInfo.buildParentStack>>) {
+        if (this.repo.gitDir === repo.gitDir) return;
         this.displayLoads.switchRepository(repo);
         this.repo = repo;
         RepositoryInfo.setSelectedRepo(repo);
@@ -584,97 +500,89 @@ class StGitDoc {
 
     reload() {
         void this.displayLoads.loadSeries(
-            reader => this.readSeries(reader), state => {
+            (reader) => this.readSeries(reader),
+            (state) => {
                 this.branchName = state.branch || null;
                 if (!this.newUpstream) {
-                    const slash = state.upstream.indexOf('/');
-                    this.remoteName = state.upstream.slice(0, slash) ||
-                        this.remoteName;
+                    const slash = state.upstream.indexOf("/");
+                    this.remoteName = state.upstream.slice(0, slash) || this.remoteName;
                     this.remoteBranch = state.upstream.slice(slash + 1) || null;
                 }
                 this.branchInitialized = state.series.ecode === 0;
                 this.stgMissing = state.series.ecode < 0;
-                if (this.stgMissing)
-                    this.warnAboutMissingStGit();
-                this.popped = state.patches.filter(p => p.kind === '-');
-                this.applied = state.patches.filter(p => p.kind !== '-');
+                if (this.stgMissing) this.warnAboutMissingStGit();
+                this.popped = state.patches.filter((p) => p.kind === "-");
+                this.applied = state.patches.filter((p) => p.kind !== "-");
                 this.baseSha = state.baseSha;
                 this.history = state.history;
                 this.loadedHistorySize = state.historySize;
                 this.needRepair = state.needRepair;
                 this.notifyDirty();
-            });
+            },
+        );
         this.reloadIndexAndWorkTree();
     }
 
     private async readSeries(reader: RepoReader) {
-        const old = new Map(this.patches.map(p => [p.label, p]));
-        const [branch, upstream, series, base, top, gitHead] =
-            await Promise.all([
-                reader.run('git', ['symbolic-ref', '--short', 'HEAD']),
-                reader.run('git', [
-                    'rev-parse', '--abbrev-ref', '--symbolic-full-name',
-                    '@{upstream}'], { inhibitLogging: true }),
-                reader.runCommand('stg', [
-                    'series', '-ae', '--commit-id=40', '--description']),
-                reader.run('stg', ['id', '--', '{base}']),
-                reader.run('stg', ['top']),
-                reader.run('git', ['rev-parse', 'HEAD']),
-            ]);
-        const lines = series.ecode === 0 ?
-            series.stdout.split('\n').filter(line => line) : [];
+        const old = new Map(this.patches.map((p) => [p.label, p]));
+        const [branch, upstream, series, base, top, gitHead] = await Promise.all([
+            reader.run("git", ["symbolic-ref", "--short", "HEAD"]),
+            reader.run("git", ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"], { inhibitLogging: true }),
+            reader.runCommand("stg", ["series", "-ae", "--commit-id=40", "--description"]),
+            reader.run("stg", ["id", "--", "{base}"]),
+            reader.run("stg", ["top"]),
+            reader.run("git", ["rev-parse", "HEAD"]),
+        ]);
+        const lines = series.ecode === 0 ? series.stdout.split("\n").filter((line) => line) : [];
         const messagesBySha = new Map<string, string>();
         if (lines.length) {
-            const output = await reader.run('git', [
-                'show', '-s', '--format=%H%x00%B%x00',
-                ...lines.map(line => line.slice(3, 43)),
-            ]);
-            const fields = output.split('\0');
-            for (let i = 0; i + 1 < fields.length; i += 2)
-                messagesBySha.set(fields[i].trim(), fields[i + 1]);
+            const output = await reader.run("git", ["show", "-s", "--format=%H%x00%B%x00", ...lines.map((line) => line.slice(3, 43))]);
+            const fields = output.split("\0");
+            for (let i = 0; i + 1 < fields.length; i += 2) messagesBySha.set(fields[i].trim(), fields[i + 1]);
         }
-        const patches = lines.map(line => {
+        const patches = lines.map((line) => {
             const sha = line.slice(3, 43);
-            return StGitPatch.fromSeries(
-                line, messagesBySha.get(sha) ?? '', reader);
+            return StGitPatch.fromSeries(line, messagesBySha.get(sha) ?? "", reader);
         });
-        await Promise.all(patches.map(async patch => {
-            const previous = old.get(patch.label);
-            if (previous)
-                await patch.updateFromOld(previous);
-            if (this.highlightPaths)
-                await patch.fetchDetails();
-        }));
+        await Promise.all(
+            patches.map(async (patch) => {
+                const previous = old.get(patch.label);
+                if (previous) await patch.updateFromOld(previous);
+                if (this.highlightPaths) await patch.fetchDetails();
+            }),
+        );
         const baseSha = base || gitHead;
         const historySize = this.historySize;
         const [history, stgHead] = await Promise.all([
-            baseSha === this.baseSha && historySize === this.loadedHistorySize ?
-                Promise.resolve(this.history) :
-                History.fromRev(reader, baseSha, historySize),
-            reader.run('stg', ['id', '--', ...(top ? [top] : [])]),
+            baseSha === this.baseSha && historySize === this.loadedHistorySize ? Promise.resolve(this.history) : History.fromRev(reader, baseSha, historySize),
+            reader.run("stg", ["id", "--", ...(top ? [top] : [])]),
         ]);
         return {
-            branch, upstream, series, patches, baseSha, history, historySize,
-            needRepair: stgHead !== gitHead && stgHead !== '',
+            branch,
+            upstream,
+            series,
+            patches,
+            baseSha,
+            history,
+            historySize,
+            needRepair: stgHead !== gitHead && stgHead !== "",
         };
     }
 
     reloadIndexAndWorkTree() {
-        void this.displayLoads.loadChanges(async reader => {
-            const index = new Index(reader);
-            const workTree = new WorkTree(reader, this.unknownFilesVisible);
-            await Promise.all([
-                index.updateFromOld(this.index)
-                    .then(() => index.fetchDetails()),
-                workTree.updateFromOld(this.workTree)
-                    .then(() => workTree.fetchDetails()),
-            ]);
-            return { index, workTree };
-        }, state => {
-            this.index = state.index;
-            this.workTree = state.workTree;
-            this.notifyDirty();
-        });
+        void this.displayLoads.loadChanges(
+            async (reader) => {
+                const index = new Index(reader);
+                const workTree = new WorkTree(reader, this.unknownFilesVisible);
+                await Promise.all([index.updateFromOld(this.index).then(() => index.fetchDetails()), workTree.updateFromOld(this.workTree).then(() => workTree.fetchDetails())]);
+                return { index, workTree };
+            },
+            (state) => {
+                this.index = state.index;
+                this.workTree = state.workTree;
+                this.notifyDirty();
+            },
+        );
     }
 
     reloadWorkTree() {
@@ -683,127 +591,114 @@ class StGitDoc {
     warnAboutMissingStGit() {
         if (!this.warnedAboutMissingStgBinary) {
             this.warnedAboutMissingStgBinary = true;
-            window.showErrorMessage('StGit binary (stg) not found');
+            window.showErrorMessage("StGit binary (stg) not found");
         }
     }
     async refresh(extraArgs: string[] = []) {
         if (this.index.deltas.length) {
             this.index.deltas = [];
             this.notifyDirty();
-            await run('stg', ['refresh', '--index', ...extraArgs]);
+            await run("stg", ["refresh", "--index", ...extraArgs]);
         } else {
             this.workTree.deltas = [];
             this.notifyDirty();
-            await run('stg', ['refresh', ...extraArgs]);
+            await run("stg", ["refresh", ...extraArgs]);
         }
         this.reload();
     }
     async refreshSpecific() {
-        const marked = this.applied.filter(x => x.marked);
-        const popped = this.popped.filter(x => x.marked);
+        const marked = this.applied.filter((x) => x.marked);
+        const popped = this.popped.filter((x) => x.marked);
         if (popped.length) {
             info("Cannot refresh popped patches.");
             return;
         }
         const p = this.curPatch;
-        if (!marked.length && p && this.applied.includes(p))
-            marked.push(p);
-        if (!marked)
-            return;
+        if (!marked.length && p && this.applied.includes(p)) marked.push(p);
+        if (!marked) return;
         if (marked.length !== 1) {
             info("More than one patch is selected.");
             return;
         }
-        this.refresh(['-p', marked[0].label]);
+        this.refresh(["-p", marked[0].label]);
     }
     async repair() {
-        await run('stg', ['repair']);
+        await run("stg", ["repair"]);
         this.reload();
     }
     async initializeBranch() {
-        await run('stg', ['init']);
+        await run("stg", ["init"]);
         this.reload();
     }
     async gotoPatch() {
         const p = this.curPatch;
-        if (p?.label)
-            await runAndReportErrors('stg', ['goto', '--', p.label]);
-        else if (p?.kind === 'H')
-            await runAndReportErrors('stg', ['pop', '-a',]);
-        else
-            return;
+        if (p?.label) await runAndReportErrors("stg", ["goto", "--", p.label]);
+        else if (p?.kind === "H") await runAndReportErrors("stg", ["pop", "-a"]);
+        else return;
         this.reload();
     }
     async pushOrPopPatches() {
-        const applied = this.applied.filter(p => p.marked);
-        const popped = this.popped.filter(p => p.marked);
+        const applied = this.applied.filter((p) => p.marked);
+        const popped = this.popped.filter((p) => p.marked);
         const p = this.curPatch;
         if (!applied.length && !popped.length && p) {
-            if (this.applied.includes(p))
-                applied.push(p);
-            else if (this.popped.includes(p))
-                popped.push(p);
+            if (this.applied.includes(p)) applied.push(p);
+            else if (this.popped.includes(p)) popped.push(p);
         }
-        if (!applied.length && !popped.length)
-            return;
+        if (!applied.length && !popped.length) return;
         if (applied.length && popped.length) {
             info("Both pushed and popped patches selected.");
             return;
         }
         if (popped.length) {
-            const patches = popped.map(p => p.label);
-            await runAndReportErrors('stg', ['push', '--', ...patches]);
+            const patches = popped.map((p) => p.label);
+            await runAndReportErrors("stg", ["push", "--", ...patches]);
         } else if (applied.length) {
-            const patches = applied.map(p => p.label);
-            await runAndReportErrors('stg', ['pop', '--', ...patches]);
+            const patches = applied.map((p) => p.label);
+            await runAndReportErrors("stg", ["pop", "--", ...patches]);
         }
         this.reload();
     }
     async movePatchesTo() {
         const p = this.curPatch;
-        const patches = this.patches.filter(p => p.marked).map(p => p.label);
-        if (!p || !patches.length)
-            return;
+        const patches = this.patches.filter((p) => p.marked).map((p) => p.label);
+        if (!p || !patches.length) return;
         if (this.popped.includes(p)) {
             info("Cannot move patches below unapplied patches.");
             return;
         }
         if ([this.index, this.workTree].includes(p)) {
-            await runAndReportErrors('stg', ['float', '--', ...patches]);
+            await runAndReportErrors("stg", ["float", "--", ...patches]);
         } else if (this.applied.includes(p)) {
-            await runAndReportErrors(
-                'stg', ['sink', '-t', p.label, '--', ...patches]);
+            await runAndReportErrors("stg", ["sink", "-t", p.label, "--", ...patches]);
         }
         this.reload();
     }
-    private async openCommentEditor(
-        line: number, body: string, context: string) {
+    private async openCommentEditor(line: number, body: string, context: string) {
         const comment: vscode.Comment = {
             contextValue: context,
             body: body,
             mode: vscode.CommentMode.Editing,
             label: "(use 50/72 format)",
             author: {
-                name: "Commit Message"
-            }
+                name: "Commit Message",
+            },
         };
         this.commentThread?.dispose();
         const comments: vscode.Comment[] = [comment];
         const pos = new vscode.Position(line, 0);
         const range = new vscode.Range(pos, pos);
-        const thread = this.commentController.createCommentThread(
-            this.doc.uri, range, comments);
-        thread.label = 'Enter commit message:';
+        const thread = this.commentController.createCommentThread(this.doc.uri, range, comments);
+        thread.label = "Enter commit message:";
         thread.contextValue = context;
         thread.canReply = false;
-        thread.collapsibleState =
-            vscode.CommentThreadCollapsibleState.Collapsed;
+        thread.collapsibleState = vscode.CommentThreadCollapsibleState.Collapsed;
         thread.state = vscode.CommentThreadState.Unresolved;
         this.commentThread = thread;
 
         const delay = vscode.env.remoteName ? 400 : 200;
         await sleep(delay);
-        await commands.executeCommand('workbench.action.expandAllComments');
+        await commands.executeCommand("workbench.action.expandAllComments");
 
         // It is difficult to determine when comment editor is really visible.
         // This is a workaround which works well in practice.
@@ -821,17 +716,15 @@ class StGitDoc {
     }
     async editCommitMessage() {
         const p = this.curPatch;
-        if (!p || !['+', '-'].includes(p.kind))
-            return;
+        if (!p || !["+", "-"].includes(p.kind)) return;
         this.editPatch = p;
-        const sha = await p.getSha() ?? "error retrieving commit message>";
-        const msg = await run('git', ['show', '-s', sha, '--format=%B']);
+        const sha = (await p.getSha()) ?? "error retrieving commit message>";
+        const msg = await run("git", ["show", "-s", sha, "--format=%B"]);
         this.openCommentEditor(p.lineNum, msg, "stgit-edit");
     }
     async copyCommitSha() {
         const sha = await this.curPatch?.getSha();
-        if (!sha)
-            return;
+        if (!sha) return;
         await vscode.env.clipboard.writeText(sha);
         showStatusMessage(`Copied commit SHA ${sha}`);
     }
@@ -840,7 +733,7 @@ class StGitDoc {
             const msg = this.commentThread.comments[0].body;
             this.cancel();
             if (msg) {
-                await run('stg', ['new', '-m', msg as string]);
+                await run("stg", ["new", "-m", msg as string]);
                 this.refresh();
             }
         }
@@ -851,8 +744,7 @@ class StGitDoc {
             const editPatch = this.editPatch;
             this.cancel();
             if (msg && editPatch) {
-                await run('stg', ['edit', '-m',
-                    msg as string, '--', editPatch.label]);
+                await run("stg", ["edit", "-m", msg as string, "--", editPatch.label]);
                 this.reload();
             }
         }
@@ -864,15 +756,16 @@ class StGitDoc {
         });
     }
     async closeAllDiffEditors() {
-        const editors = window.visibleTextEditors.filter(
-            e => e.document.uri.scheme === 'stgit-diff');
+        const editors = window.visibleTextEditors.filter((e) => e.document.uri.scheme === "stgit-diff");
         for (const e of editors) {
             // workaround for missing 'closeEditor' API:
             const opts: vscode.TextDocumentShowOptions = {
-                viewColumn: e.viewColumn, preview: true, preserveFocus: false
+                viewColumn: e.viewColumn,
+                preview: true,
+                preserveFocus: false,
             };
             await vscode.window.showTextDocument(e.document.uri, opts);
-            commands.executeCommand('workbench.action.closeActiveEditor');
+            commands.executeCommand("workbench.action.closeActiveEditor");
         }
     }
     async cancel() {
@@ -883,34 +776,29 @@ class StGitDoc {
         this.focusWindow();
     }
     async squashPatches() {
-        const patches = this.patches.filter(p => p.marked);
-        if (patches.length <= 1)
-            return;
-        const labels = patches.map(p => p.label);
-        const descriptions = patches.map(
-            (p, i) => `${i + 1} - ${p.description}`);
+        const patches = this.patches.filter((p) => p.marked);
+        if (patches.length <= 1) return;
+        const labels = patches.map((p) => p.label);
+        const descriptions = patches.map((p, i) => `${i + 1} - ${p.description}`);
         const desc = await window.showQuickPick(descriptions, {
-            placeHolder: "Select commit comment:"
+            placeHolder: "Select commit comment:",
         });
-        if (!desc)
-            return;
-        const patch = patches[descriptions.findIndex(x => x === desc)];
-        const msg = await patch.getCommitMessage() ?? desc;
+        if (!desc) return;
+        const patch = patches[descriptions.findIndex((x) => x === desc)];
+        const msg = (await patch.getCommitMessage()) ?? desc;
 
-        const result = await runCommand(
-            'stg', ['squash', '-m', msg, ...labels]);
-        if (!result.ecode)
-            patches.forEach(p => p.setMarked(false));
+        const result = await runCommand("stg", ["squash", "-m", msg, ...labels]);
+        if (!result.ecode) patches.forEach((p) => p.setMarked(false));
         this.reload();
     }
     async deletePatches() {
         const patch = this.curPatch;
-        const patches = this.patches.filter(p => p.marked).map(p => p.label);
+        const patches = this.patches.filter((p) => p.marked).map((p) => p.label);
         if (patches.length) {
-            await run('stg', ['delete', ...patches]);
+            await run("stg", ["delete", ...patches]);
             this.reload();
-        } else if (patch?.kind === '-' || patch?.kind === '+') {
-            await run('stg', ['delete', patch.label]);
+        } else if (patch?.kind === "-" || patch?.kind === "+") {
+            await run("stg", ["delete", patch.label]);
             this.reload();
         }
     }
@@ -918,12 +806,12 @@ class StGitDoc {
     async highlightFile() {
         const patch = this.curPatch;
         const delta = this.curChange;
-        const work = this.applied.map(p => p.fetchDetails());
+        const work = this.applied.map((p) => p.fetchDetails());
         await Promise.all(work);
         if (delta) {
             this.highlightPaths = new Set([delta.path]);
         } else if (patch) {
-            this.highlightPaths = new Set(patch.deltas.map(x => x.path));
+            this.highlightPaths = new Set(patch.deltas.map((x) => x.path));
         } else {
             this.highlightPaths = null;
         }
@@ -945,28 +833,24 @@ class StGitDoc {
                 preview: true,
             };
             if (this.workTree.deltas.includes(delta)) {
-                dstUri = this.repo.getPathUri(
-                    delta.destPath ?? delta.path);
+                dstUri = this.repo.getPathUri(delta.destPath ?? delta.path);
             }
-            vscode.commands.executeCommand("vscode.diff",
-                srcUri, dstUri, `Diff ${delta.path}`, opts);
+            vscode.commands.executeCommand("vscode.diff", srcUri, dstUri, `Diff ${delta.path}`, opts);
         }
     }
     private async selectMergeDiffMode(delta: Delta): Promise<string | null> {
-        if (!delta.conflict)
-            return "";
+        if (!delta.conflict) return "";
         const modes = [
-            { desc: '1 - Incoming Changes (base -> theirs)', mode: "13" },
-            { desc: '2 - Local Changes (base -> ours)', mode: "12" },
-            { desc: '3 - Our (ours -> work tree)', mode: "2" },
-            { desc: '4 - Theirs (theirs -> work tree)', mode: "3" },
+            { desc: "1 - Incoming Changes (base -> theirs)", mode: "13" },
+            { desc: "2 - Local Changes (base -> ours)", mode: "12" },
+            { desc: "3 - Our (ours -> work tree)", mode: "2" },
+            { desc: "4 - Theirs (theirs -> work tree)", mode: "3" },
         ];
-        const labels = modes.map(s => s.desc);
+        const labels = modes.map((s) => s.desc);
         const s = await window.showQuickPick(labels, {
-            placeHolder: "Select diff type"
+            placeHolder: "Select diff type",
         });
-        if (!s)
-            return null;
+        if (!s) return null;
         const mode = modes[labels.indexOf(s)].mode;
         return `,diffmode=${mode}`;
     }
@@ -978,33 +862,25 @@ class StGitDoc {
         let invariant = false;
         if (patch && sha) {
             const s = `${sha.slice(0, 5)}`;
-            if (delta)
-                spec = `diff-${s}-${delta.path}#sha=${sha},file=${delta.path}` +
-                    (delta.destPath ? `,dest=${delta.destPath}` : '');
-            else
-                spec = `diff-${s}#sha=${sha}`;
-            invariant = true;   // Diff contents never changes
-        } else if (patch?.kind === 'I') {
+            if (delta) spec = `diff-${s}-${delta.path}#sha=${sha},file=${delta.path}` + (delta.destPath ? `,dest=${delta.destPath}` : "");
+            else spec = `diff-${s}#sha=${sha}`;
+            invariant = true; // Diff contents never changes
+        } else if (patch?.kind === "I") {
             if (delta) {
                 const m = await this.selectMergeDiffMode(delta);
-                if (m === null)
-                    return;
-                spec = `diff-index-${delta.path}#index,file=${delta.path}` +
-                    (delta.destPath ? `,dest=${delta.destPath}` : '') + m;
+                if (m === null) return;
+                spec = `diff-index-${delta.path}#index,file=${delta.path}` + (delta.destPath ? `,dest=${delta.destPath}` : "") + m;
             } else {
                 spec = `diff-index#index`;
             }
-        } else if (patch?.kind === 'W') {
-            if (delta)
-                spec = `diff-${delta.path}#file=${delta.path}`;
-            else
-                spec = `diff-work-tree`;
+        } else if (patch?.kind === "W") {
+            if (delta) spec = `diff-${delta.path}#file=${delta.path}`;
+            else spec = `diff-work-tree`;
         }
         if (spec) {
             const uri = vscode.Uri.parse(`stgit-diff:///${spec}`);
             // If the uri is already open, we must force a refresh
-            if (!invariant)
-                refreshDiff(uri);
+            if (!invariant) refreshDiff(uri);
             openAndShowDiffDocument(uri, {
                 viewColumn: this.alternateViewColumn,
                 preserveFocus: opts.preserveFocus,
@@ -1018,61 +894,56 @@ class StGitDoc {
         this.showDiffWithOpts({ preserveFocus: false });
     }
     async help() {
-        vscode.commands.executeCommand(
-            "workbench.action.quickOpen", ">StGit: ");
+        vscode.commands.executeCommand("workbench.action.quickOpen", ">StGit: ");
     }
     async newPatch() {
-        await run('stg', ['new', '-m', 'New patch']);
+        await run("stg", ["new", "-m", "New patch"]);
         this.reload();
     }
     async createBranch() {
         const branch = await window.showInputBox({
             prompt: `Enter branch name`,
         });
-        if (!branch)
-            return;
-        await runAndReportErrors('stg', ['branch', '--create', branch]);
+        if (!branch) return;
+        await runAndReportErrors("stg", ["branch", "--create", branch]);
         this.newUpstream = false;
         this.reload();
     }
     async switchBranch() {
-        const indexDeltas = this.index.deltas.filter(d => !d.isSubmodule);
-        const workTreeDeltas = this.workTree.deltas.filter(
-            d => !d.isSubmodule);
+        const indexDeltas = this.index.deltas.filter((d) => !d.isSubmodule);
+        const workTreeDeltas = this.workTree.deltas.filter((d) => !d.isSubmodule);
         if (indexDeltas.length || workTreeDeltas.length) {
             info("Work tree and index must be clean to switch branch");
             return;
         }
-        const create = '$(plus) Create new branch';
-        const branches = (await run('git', ['branch']).then<string[]>((s) => {
-            return s.split("\n").map(s => s.replace(/^[*+]/, "").trim());
-        }));
+        const create = "$(plus) Create new branch";
+        const branches = await run("git", ["branch"]).then<string[]>((s) => {
+            return s.split("\n").map((s) => s.replace(/^[*+]/, "").trim());
+        });
         const branch = await window.showQuickPick([create, ...branches], {
-            placeHolder: "Select branch to checkout"
+            placeHolder: "Select branch to checkout",
         });
         if (!branch) {
             return;
-        } else if (branch.includes('Create new branch')) {
+        } else if (branch.includes("Create new branch")) {
             this.createBranch();
         } else if (branch) {
-            await runAndReportErrors('git', ['switch', branch]);
+            await runAndReportErrors("git", ["switch", branch]);
             this.newUpstream = false;
             this.reload();
         }
     }
     private async allBranches() {
-        const local = (await run('git', ['branch'])).split("\n");
-        const remote = (await run('git', ['branch', '-r'])).split("\n");
-        return [...local, ...remote].map(
-            s => s.replace("*", "").trim()).filter(x => x);
+        const local = (await run("git", ["branch"])).split("\n");
+        const remote = (await run("git", ["branch", "-r"])).split("\n");
+        return [...local, ...remote].map((s) => s.replace("*", "").trim()).filter((x) => x);
     }
     async rebase() {
         const base = await window.showQuickPick(this.allBranches(), {
-            placeHolder: "Select upstream branch for rebase"
+            placeHolder: "Select upstream branch for rebase",
         });
         if (base) {
-            const result = await runAndReportErrors(
-                'stg', ['rebase', '--', base]);
+            const result = await runAndReportErrors("stg", ["rebase", "--", base]);
             this.reload();
             if (result.ecode === 0) {
                 showStatusMessage(`Rebased series on top of '${base}'`);
@@ -1081,9 +952,9 @@ class StGitDoc {
     }
 
     async selectRemote() {
-        const remotes = (await run('git', ['remote'])).split("\n");
+        const remotes = (await run("git", ["remote"])).split("\n");
         const remote = await window.showQuickPick(remotes, {
-            placeHolder: "Select remote"
+            placeHolder: "Select remote",
         });
         if (remote) {
             this.remoteName = remote.trim();
@@ -1093,22 +964,18 @@ class StGitDoc {
     }
 
     async selectUpstreamBranch() {
-        const clear = '$(close) Clear upstream setting';
-        const remotes = (await run('git', ['remote']))
+        const clear = "$(close) Clear upstream setting";
+        const remotes = (await run("git", ["remote"])).split("\n").map((r) => `$(plus) ${r.trim()}: New upstream branch`);
+        const branches = (await run("git", ["branch", "-r"]))
             .split("\n")
-            .map(r => `$(plus) ${r.trim()}: New upstream branch`);
-        const branches = (await run('git', ['branch', '-r']))
-            .split("\n")
-            .map(b => b.trim())
-            .filter(b => !b.includes(" "));
-        const upstream = await window.showQuickPick(
-            [clear, ...remotes, ...branches],
-            { placeHolder: "Select upstream branch" });
+            .map((b) => b.trim())
+            .filter((b) => !b.includes(" "));
+        const upstream = await window.showQuickPick([clear, ...remotes, ...branches], { placeHolder: "Select upstream branch" });
         if (!upstream) {
             return;
         } else if (upstream.includes("Clear upstream")) {
             this.remoteBranch = null;
-            await run('git', ['branch', '--unset-upstream']);
+            await run("git", ["branch", "--unset-upstream"]);
         } else if (upstream.includes("$")) {
             const n = upstream.search(":");
             const s = upstream.search(" ");
@@ -1116,8 +983,7 @@ class StGitDoc {
             const branch = await window.showInputBox({
                 prompt: `${remote} branch name`,
             });
-            if (!branch)
-                return;
+            if (!branch) return;
             this.remoteName = remote;
             this.remoteBranch = branch;
             this.newUpstream = true;
@@ -1125,24 +991,19 @@ class StGitDoc {
             const n = upstream.search("/");
             const remote = upstream.slice(0, n);
             const branch = upstream.slice(n + 1);
-            if (!remote || !branch)
-                return;
+            if (!remote || !branch) return;
             this.remoteName = remote;
             this.remoteBranch = branch;
             this.newUpstream = false;
-            await runAndReportErrors('git', [
-                'branch', '--set-upstream-to',
-                `${this.remoteName}/${this.remoteBranch}`]);
+            await runAndReportErrors("git", ["branch", "--set-upstream-to", `${this.remoteName}/${this.remoteBranch}`]);
         }
         this.reload();
     }
 
     async gitFetch() {
-        if (!this.remoteName)
-            await this.selectRemote();
+        if (!this.remoteName) await this.selectRemote();
         if (this.remoteName) {
-            const result = await runAndReportErrors(
-                'git', ['fetch', this.remoteName]);
+            const result = await runAndReportErrors("git", ["fetch", this.remoteName]);
             if (result.ecode === 0) {
                 log(`git fetch ${this.remoteName}: success`);
             }
@@ -1150,28 +1011,21 @@ class StGitDoc {
         showStatusMessage(`Fetched '${this.remoteName}'`);
     }
 
-    async gitPush(kind: 'force' | 'fast-forward') {
-        if (!this.remoteBranch)
-            await this.selectUpstreamBranch();
-        if (!this.remoteBranch || !this.remoteName)
-            return;
-        const forcePlus = kind === 'force' ? '+' : '';
+    async gitPush(kind: "force" | "fast-forward") {
+        if (!this.remoteBranch) await this.selectUpstreamBranch();
+        if (!this.remoteBranch || !this.remoteName) return;
+        const forcePlus = kind === "force" ? "+" : "";
         const spec = `${forcePlus}HEAD:${this.remoteBranch}`;
 
-        const pushStr = kind == 'force' ? "Force-push" : "Push";
+        const pushStr = kind == "force" ? "Force-push" : "Push";
         const confirmationMsg = `${pushStr} ${spec} to ${this.remoteName}?`;
-        if (!await getUserConfirmation(confirmationMsg))
-            return;
+        if (!(await getUserConfirmation(confirmationMsg))) return;
 
-        const result = await runAndReportErrors(
-            'git', ['push', this.remoteName, spec],
-            { errorMsg: 'push failed' });
-        if (result.ecode !== 0)
-            return;
+        const result = await runAndReportErrors("git", ["push", this.remoteName, spec], { errorMsg: "push failed" });
+        if (result.ecode !== 0) return;
         log(`git push ${this.remoteName} ${spec}: success`);
         if (result.stderr.includes("Create a pull request")) {
-            const link = result.stderr.split("\n").filter(
-                s => s.startsWith("remote:") && s.includes("https:"))[0];
+            const link = result.stderr.split("\n").filter((s) => s.startsWith("remote:") && s.includes("https:"))[0];
             const s = `Create a GitHub pull request for ${this.remoteBranch}?`;
             if (await getUserConfirmation(s)) {
                 const n = link.search("https://");
@@ -1183,13 +1037,11 @@ class StGitDoc {
     }
 
     markPatch() {
-        if (this.curPatch?.setMarked(true))
-            this.notifyDirty();
+        if (this.curPatch?.setMarked(true)) this.notifyDirty();
         this.moveCursorToNextPatch();
     }
     unmarkPatch() {
-        if (this.curPatch?.setMarked(false))
-            this.notifyDirty();
+        if (this.curPatch?.setMarked(false)) this.notifyDirty();
         this.moveCursorToNextPatch();
     }
     async toggleExpand() {
@@ -1202,8 +1054,7 @@ class StGitDoc {
                 return;
             }
             const uri = this.repo.getPathUri(delta.path);
-            if (!uri)
-                return;
+            if (!uri) return;
             const doc = await workspace.openTextDocument(uri);
             if (doc)
                 window.showTextDocument(doc, {
@@ -1214,11 +1065,9 @@ class StGitDoc {
             this.notifyDirty();
         } else {
             const line = this.editor?.document.lineAt(this.curLine);
-            if (line?.text.startsWith('!')) {
-                if (this.needRepair)
-                    this.repair();
-                else if (!this.branchInitialized)
-                    this.initializeBranch();
+            if (line?.text.startsWith("!")) {
+                if (this.needRepair) this.repair();
+                else if (!this.branchInitialized) this.initializeBranch();
             }
         }
     }
@@ -1252,7 +1101,7 @@ class StGitDoc {
         const change = this.curChange;
         if (change) {
             if (change.conflict) {
-                await run('git', ["add", change.path]);
+                await run("git", ["add", change.path]);
                 this.reload();
             } else {
                 info("No conflict to resolve");
@@ -1267,87 +1116,75 @@ class StGitDoc {
             info("Conflicts must be marked as resolved (shift-R).");
             return;
         }
-        if (patch?.kind === 'W') {
+        if (patch?.kind === "W") {
             if (change) {
-                if (change.deleted)
-                    await run('git', ['rm', '--', change.path]);
-                else
-                    await run('git', ['add', '--', change.path,
-                        ...(change.destPath ? [change.destPath] : [])]);
+                if (change.deleted) await run("git", ["rm", "--", change.path]);
+                else await run("git", ["add", "--", change.path, ...(change.destPath ? [change.destPath] : [])]);
             } else {
-                await run('git', ['add', '-u']);
+                await run("git", ["add", "-u"]);
             }
             this.reloadIndexAndWorkTree();
-        } else if (patch?.kind == 'I') {
-            if (change)
-                await run('git', ['restore', '-S', '--', change.path,
-                    ...(change.destPath ? [change.destPath] : [])]);
-            else
-                await run('git', ["reset", "HEAD"]);
+        } else if (patch?.kind == "I") {
+            if (change) await run("git", ["restore", "-S", "--", change.path, ...(change.destPath ? [change.destPath] : [])]);
+            else await run("git", ["reset", "HEAD"]);
             this.reloadIndexAndWorkTree();
         } else if (patch && patch === this.applied.at(-1)) {
-            if (change)
-                await uncommitFiles([change.path,
-                    ...(change.destPath ? [change.destPath] : [])]);
-            else
-                await uncommitFiles();
+            if (change) await uncommitFiles([change.path, ...(change.destPath ? [change.destPath] : [])]);
+            else await uncommitFiles();
             this.reload();
         }
     }
     async revertChanges() {
         const patch = this.curPatch;
         const change = this.curChange;
-        if (patch?.kind === 'I') {
+        if (patch?.kind === "I") {
             if (change) {
-                log(['git', 'restore', '-WS', '--', change.path].join(" "));
-                await run('git', ['restore', '-WS', '--', change.path]);
+                log(["git", "restore", "-WS", "--", change.path].join(" "));
+                await run("git", ["restore", "-WS", "--", change.path]);
             } else {
-                const files = patch.deltas.map(d => d.path);
-                log(['git', 'restore', '-WS', '--', ...files].join(" '"));
-                await run('git', ['restore', '-WS', '--', ...files]);
+                const files = patch.deltas.map((d) => d.path);
+                log(["git", "restore", "-WS", "--", ...files].join(" '"));
+                await run("git", ["restore", "-WS", "--", ...files]);
             }
-        } else if (patch?.kind === 'W') {
+        } else if (patch?.kind === "W") {
             if (change) {
                 if (change.conflict) {
                     // Redo index merge
-                    await run('git', ['checkout', '-m', change.path]);
+                    await run("git", ["checkout", "-m", change.path]);
                 } else {
-                    await run('git', ['restore', '--', change.path]);
+                    await run("git", ["restore", "--", change.path]);
                 }
             } else {
-                const files = patch.deltas.map(d => d.path);
-                await run('git', ['restore', '--', ...files]);
+                const files = patch.deltas.map((d) => d.path);
+                await run("git", ["restore", "--", ...files]);
             }
         }
         this.reloadIndexAndWorkTree();
     }
     async undo() {
-        await runAndReportErrors('stg', ['undo']);
+        await runAndReportErrors("stg", ["undo"]);
         this.reload();
     }
     async hardUndo() {
-        const msg = 'Perform a hard undo?' +
-            ' Files not checked in could potentially be overwritten.';
-        if (!await getUserConfirmation(msg))
-            return;
-        await runAndReportErrors('stg', ['undo', '--hard']);
+        const msg = "Perform a hard undo?" + " Files not checked in could potentially be overwritten.";
+        if (!(await getUserConfirmation(msg))) return;
+        await runAndReportErrors("stg", ["undo", "--hard"]);
         this.reload();
     }
     async redo() {
-        await runAndReportErrors('stg', ['redo']);
+        await runAndReportErrors("stg", ["redo"]);
         this.reload();
     }
     async popCurrentPatch() {
-        await runAndReportErrors('stg', ['pop']);
+        await runAndReportErrors("stg", ["pop"]);
         this.reload();
     }
     async pushNextPatch() {
-        await runAndReportErrors('stg', ['push']);
+        await runAndReportErrors("stg", ["push"]);
         this.reload();
     }
     async setHistorySize() {
-        const numStr = await window.showQuickPick([
-            '0', '1', '5', '10', '15', '20', '25', '30', '35', '40'], {
+        const numStr = await window.showQuickPick(["0", "1", "5", "10", "15", "20", "25", "30", "35", "40"], {
             placeHolder: "Specify Git history size",
         });
         if (numStr) {
@@ -1357,12 +1194,12 @@ class StGitDoc {
     }
     async commitOrUncommitPatches() {
         const curPatch = this.curPatch;
-        if (curPatch?.kind === 'H') {
+        if (curPatch?.kind === "H") {
             const n = this.history.length - this.history.indexOf(curPatch);
-            await run('stg', ['uncommit', `-n${n}`]);
-        } else if (curPatch?.kind === '+') {
+            await run("stg", ["uncommit", `-n${n}`]);
+        } else if (curPatch?.kind === "+") {
             const n = this.applied.indexOf(curPatch) + 1;
-            await run('stg', ['commit', `-n${n}`]);
+            await run("stg", ["commit", `-n${n}`]);
         } else {
             return;
         }
@@ -1376,7 +1213,7 @@ class StGitDoc {
     private moveCursorToNextPatch() {
         const list = this.patches;
         const curPatch = this.curPatch;
-        const ind = list.findIndex(p => p === curPatch);
+        const ind = list.findIndex((p) => p === curPatch);
         const nextPatch = list[ind + 1];
         if (this.editor) {
             const line = nextPatch ? nextPatch.lineNum : this.curLine + 1;
@@ -1400,53 +1237,46 @@ class StGitDoc {
 
     private async moveCursorToIndex() {
         const editor = this.editor;
-        if (!editor)
-            return;
+        if (!editor) return;
         this.moveCursorToIndexAtOpen(editor);
     }
 
     private async moveCursorToDelta(path: string) {
         const editor = this.editor;
-        if (!editor)
-            return;
+        if (!editor) return;
         // The work tree deltas may load after several document
         // updates, so keep trying on each update until found.
         let resolve: () => void;
-        const found = new Promise<void>(r => { resolve = r; });
+        const found = new Promise<void>((r) => {
+            resolve = r;
+        });
         const watcher = workspace.onDidChangeTextDocument((e) => {
-            if (e.document !== this.doc)
-                return;
+            if (e.document !== this.doc) return;
             for (const p of this.patches) {
-                const idx = p.deltas.findIndex(
-                    d => d.path === path);
+                const idx = p.deltas.findIndex((d) => d.path === path);
                 if (idx < 0) {
                     continue;
                 }
                 const line = p.lineNum + idx + 1;
                 const pos = new vscode.Position(line, 0);
-                editor.selection =
-                    new vscode.Selection(pos, pos);
-                editor.revealRange(
-                    new vscode.Range(pos, pos));
+                editor.selection = new vscode.Selection(pos, pos);
+                editor.revealRange(new vscode.Range(pos, pos));
                 resolve();
                 return;
             }
         });
-        const winner = await Promise.race([
-            found.then(() => 'found' as const),
-            sleep(4000).then(() => 'timeout' as const),
-        ]);
+        const winner = await Promise.race([found.then(() => "found" as const), sleep(4000).then(() => "timeout" as const)]);
         watcher.dispose();
-        if (winner === 'timeout')
-            this.moveCursorToIndex();
+        if (winner === "timeout") this.moveCursorToIndex();
     }
 
     private async moveCursorToIndexAtOpen(editor: vscode.TextEditor) {
         let resolve: () => void;
-        const found = new Promise<void>(r => { resolve = r; });
+        const found = new Promise<void>((r) => {
+            resolve = r;
+        });
         const watcher = workspace.onDidChangeTextDocument((e) => {
-            if (e.document !== this.doc)
-                return;
+            if (e.document !== this.doc) return;
             const line = this.index.lineNum;
             if (line === 0) {
                 return;
@@ -1456,38 +1286,26 @@ class StGitDoc {
             editor.revealRange(new vscode.Range(p, p));
             resolve();
         });
-        const winner = await Promise.race([
-            found.then(() => 'found' as const),
-            sleep(4000).then(() => 'timeout' as const),
-        ]);
+        const winner = await Promise.race([found.then(() => "found" as const), sleep(4000).then(() => "timeout" as const)]);
         watcher.dispose();
-        if (winner === 'timeout')
-            this.moveCursorToIndex();
+        if (winner === "timeout") this.moveCursorToIndex();
     }
 
     private updateDecorations() {
-        this.highlightRanges = this.applied.filter(p =>
-            p.deltas.some(d => this.highlightPaths?.has(d.path))).map(
-                p => new vscode.Range(p.lineNum, 2, p.lineNum, 2));
-        this.historyRanges = this.history.map(
-            p => new vscode.Range(p.lineNum, 0, p.lineNum, 999));
+        this.highlightRanges = this.applied.filter((p) => p.deltas.some((d) => this.highlightPaths?.has(d.path))).map((p) => new vscode.Range(p.lineNum, 2, p.lineNum, 2));
+        this.historyRanges = this.history.map((p) => new vscode.Range(p.lineNum, 0, p.lineNum, 999));
         // Submodule line is line 0 when inside a submodule
-        this.submoduleRanges = this.relativePathFromRoot
-            ? [new vscode.Range(0, 0, 0, 999)]
-            : [];
+        this.submoduleRanges = this.relativePathFromRoot ? [new vscode.Range(0, 0, 0, 999)] : [];
         // Also highlight [submodule] suffix on delta lines
         for (const p of this.patches) {
-            if (p.lineCount <= 1)
-                continue;
+            if (p.lineCount <= 1) continue;
             for (let i = 0; i < p.deltas.length; i++) {
                 const d = p.deltas[i];
-                if (!d.isSubmodule)
-                    continue;
+                if (!d.isSubmodule) continue;
                 const line = p.lineNum + i + 1;
-                const col = d.docLine.indexOf('[submodule]');
+                const col = d.docLine.indexOf("[submodule]");
                 if (col >= 0) {
-                    this.submoduleRanges.push(new vscode.Range(
-                        line, col, line, col + '[submodule]'.length));
+                    this.submoduleRanges.push(new vscode.Range(line, col, line, col + "[submodule]".length));
                 }
             }
         }
@@ -1496,16 +1314,12 @@ class StGitDoc {
 
     private updateEditorDecorations() {
         for (const editor of window.visibleTextEditors) {
-            if (editor.document !== this.doc)
-                continue;
+            if (editor.document !== this.doc) continue;
 
             const cls = StGitMode.instance!;
-            editor.setDecorations(
-                cls.fileHighlightDecoration, this.highlightRanges);
-            editor.setDecorations(
-                cls.historyDecoration, this.historyRanges);
-            editor.setDecorations(
-                cls.submoduleDecoration, this.submoduleRanges);
+            editor.setDecorations(cls.fileHighlightDecoration, this.highlightRanges);
+            editor.setDecorations(cls.historyDecoration, this.historyRanges);
+            editor.setDecorations(cls.submoduleDecoration, this.submoduleRanges);
         }
     }
 
@@ -1514,8 +1328,7 @@ class StGitDoc {
         if (active?.document === this.doc) {
             return active;
         } else {
-            return window.visibleTextEditors.find(
-                e => (e.document === this.doc)) ?? null;
+            return window.visibleTextEditors.find((e) => e.document === this.doc) ?? null;
         }
     }
     private get curLine(): number {
@@ -1524,30 +1337,26 @@ class StGitDoc {
     private get curPatch(): Patch | null {
         const line = this.curLine;
         for (const p of this.patches) {
-            if (p.lineNum <= line && line < p.lineNum + p.lineCount)
-                return p;
+            if (p.lineNum <= line && line < p.lineNum + p.lineCount) return p;
         }
         return null;
     }
     private get curChange(): Delta | null {
         const line = this.curLine;
         for (const p of this.patches) {
-            if (p.lineNum < line && line < p.lineNum + p.lineCount)
-                return p.deltas[line - p.lineNum - 1] ?? null;
+            if (p.lineNum < line && line < p.lineNum + p.lineCount) return p.deltas[line - p.lineNum - 1] ?? null;
         }
         return null;
     }
     get alternateViewColumn() {
         const col = this.mainViewColumn;
-        return (col > 1) ? col - 1 : col + 1;
+        return col > 1 ? col - 1 : col + 1;
     }
 
     private get upstreamString(): string {
-        if (this.remoteBranch && this.remoteName)
-            return ` <-> ${this.remoteName}/${this.remoteBranch}`;
-        if (this.remoteName)
-            return ` (${this.remoteName})`;
-        return '';
+        if (this.remoteBranch && this.remoteName) return ` <-> ${this.remoteName}/${this.remoteBranch}`;
+        if (this.remoteName) return ` (${this.remoteName})`;
+        return "";
     }
 
     get documentContents(): string {
@@ -1567,14 +1376,10 @@ class StGitDoc {
         }
         pushVec(this.history);
         pushVec(this.applied);
-        if (!this.applied.length)
-            lines.push("> <no patch applied>");
-        if (this.stgMissing)
-            lines.push("! *** StGit not installed ('stg' binary missing) ***");
-        else if (!this.branchInitialized)
-            lines.push("! *** Setup branch for StGit ('stg init') ***");
-        else if (this.needRepair)
-            lines.push("! *** Repair needed [C-u g] ***");
+        if (!this.applied.length) lines.push("> <no patch applied>");
+        if (this.stgMissing) lines.push("! *** StGit not installed ('stg' binary missing) ***");
+        else if (!this.branchInitialized) lines.push("! *** Setup branch for StGit ('stg init') ***");
+        else if (this.needRepair) lines.push("! *** Repair needed [C-u g] ***");
         pushVec([this.index]);
         pushVec([this.workTree]);
         pushVec(this.popped);
@@ -1588,34 +1393,36 @@ class StGitMode {
     static instance: StGitMode | null;
 
     private changeEmitter = new vscode.EventEmitter<vscode.Uri>();
-    private pendingSelections = new Map<vscode.TextEditor, {
-        previous: string;
-        next: string;
-        selections: readonly vscode.Selection[];
-    }>();
-    private commentController = vscode.comments.createCommentController(
-        'stgit.comments', "StGit");
+    private pendingSelections = new Map<
+        vscode.TextEditor,
+        {
+            previous: string;
+            next: string;
+            selections: readonly vscode.Selection[];
+        }
+    >();
+    private commentController = vscode.comments.createCommentController("stgit.comments", "StGit");
 
     stgit: StGitDoc | null = null;
     private repositoryFollower = new RepositoryFollower({
         lookup: (directory: string) => RepositoryInfo.createForPath(directory),
         current: () => this.stgit?.repo ?? null,
-        loadContext: repo => RepositoryInfo.buildParentStack(repo),
+        loadContext: (repo) => RepositoryInfo.buildParentStack(repo),
         switchTo: (repo, context) => {
             this.stgit?.switchRepository(repo, context);
         },
     });
 
     readonly fileHighlightDecoration = window.createTextEditorDecorationType({
-        before: { contentText: "⏹ ", },
+        before: { contentText: "⏹ " },
     });
     readonly historyDecoration = window.createTextEditorDecorationType({
-        dark: { color: "#777", },
-        light: { color: "#999", },
+        dark: { color: "#777" },
+        light: { color: "#999" },
     });
     readonly submoduleDecoration = window.createTextEditorDecorationType({
-        dark: { color: "#4EC9B0", },  // Teal/cyan color
-        light: { color: "#16825D", }, // Darker green for light themes
+        dark: { color: "#4EC9B0" }, // Teal/cyan color
+        light: { color: "#16825D" }, // Darker green for light themes
         fontStyle: "italic",
     });
     constructor(context: vscode.ExtensionContext) {
@@ -1629,14 +1436,15 @@ class StGitMode {
                     for (const editor of window.visibleTextEditors) {
                         if (editor.document === doc) {
                             this.pendingSelections.set(editor, {
-                                previous: doc.getText(), next,
+                                previous: doc.getText(),
+                                next,
                                 selections: editor.selections,
                             });
                         }
                     }
                 }
                 return next;
-            }
+            },
         };
         function cmd(cmd: string, func: () => void) {
             return commands.registerTextEditorCommand(`stgit.${cmd}`, func);
@@ -1645,95 +1453,85 @@ class StGitMode {
             return commands.registerCommand(`stgit.${cmd}`, func);
         }
         context.subscriptions.push(
-            this,       /* self dispose */
+            this /* self dispose */,
 
-            window.onDidChangeTextEditorSelection(event => {
+            window.onDidChangeTextEditorSelection((event) => {
                 if (event.kind !== undefined) {
-                    const pending = this.pendingSelections.get(
-                        event.textEditor);
-                    if (pending)
-                        pending.selections = event.selections;
+                    const pending = this.pendingSelections.get(event.textEditor);
+                    if (pending) pending.selections = event.selections;
                 }
             }),
-            workspace.onDidChangeTextDocument(event => {
-                if (event.document !== this.stgit?.doc)
-                    return;
+            workspace.onDidChangeTextDocument((event) => {
+                if (event.document !== this.stgit?.doc) return;
                 for (const [editor, pending] of this.pendingSelections) {
-                    if (event.document.getText() !== pending.next)
-                        continue;
-                    editor.selections = pending.selections.map(selection => {
+                    if (event.document.getText() !== pending.next) continue;
+                    editor.selections = pending.selections.map((selection) => {
                         const position = (point: vscode.Position) => {
-                            const line = correspondingLine(
-                                pending.previous, pending.next, point.line);
-                            const column = Math.min(point.character,
-                                event.document.lineAt(line).text.length);
+                            const line = correspondingLine(pending.previous, pending.next, point.line);
+                            const column = Math.min(point.character, event.document.lineAt(line).text.length);
                             return new vscode.Position(line, column);
                         };
-                        return new vscode.Selection(
-                            position(selection.anchor),
-                            position(selection.active));
+                        return new vscode.Selection(position(selection.anchor), position(selection.active));
                     });
-                    editor.revealRange(editor.selection,
-                        vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+                    editor.revealRange(editor.selection, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
                     this.pendingSelections.delete(editor);
                 }
             }),
 
-            globalCmd('open', () => this.openStgit()),
-            cmd('refresh', () => this.stgit?.refresh()),
-            cmd('repair', () => this.stgit?.repair()),
-            cmd('refreshSpecific', () => this.stgit?.refreshSpecific()),
-            cmd('createBranch', () => this.stgit?.createBranch()),
-            cmd('switchBranch', () => this.stgit?.switchBranch()),
-            cmd('rebase', () => this.stgit?.rebase()),
-            cmd('gitFetch', () => this.stgit?.gitFetch()),
-            cmd('gitPush', () => this.stgit?.gitPush('fast-forward')),
-            cmd('gitForcePush', () => this.stgit?.gitPush('force')),
-            cmd('selectRemote', () => this.stgit?.selectRemote()),
-            cmd('selectUpstreamBranch',
-                () => this.stgit?.selectUpstreamBranch()),
-            cmd('reload', () => this.stgit?.reload()),
-            cmd('resolveConflict', () => this.stgit?.resolveConflict()),
-            cmd('gotoPatch', () => this.stgit?.gotoPatch()),
-            cmd('markPatch', () => this.stgit?.markPatch()),
-            cmd('unmarkPatch', () => this.stgit?.unmarkPatch()),
-            cmd('toggleExpand', () => this.stgit?.toggleExpand()),
-            cmd('toggleChanges', () => this.stgit?.toggleChanges()),
-            cmd('toggleShowingUnknown',
-                () => this.stgit?.toggleShowingUnknownFiles()),
-            cmd('createPatch', () => this.stgit?.createPatch()),
-            cmd('newPatch', () => this.stgit?.newPatch()),
-            cmd('pushOrPopPatches', () => this.stgit?.pushOrPopPatches()),
-            cmd('pushNextPatch', () => this.stgit?.pushNextPatch()),
-            cmd('popCurrentPatch', () => this.stgit?.popCurrentPatch()),
-            cmd('movePatchesTo', () => this.stgit?.movePatchesTo()),
-            cmd('commentCreatePatch', () => this.stgit?.commentCreatePatch()),
-            cmd('completePatchEdit', () => this.stgit?.completePatchEdit()),
-            cmd('cancel', () => this.stgit?.cancel()),
-            cmd('editCommitMessage', () => this.stgit?.editCommitMessage()),
-            cmd('copyCommitSha', () => this.stgit?.copyCommitSha()),
-            cmd('squashPatches', () => this.stgit?.squashPatches()),
-            cmd('deletePatches', () => this.stgit?.deletePatches()),
-            cmd('highlightFile', () => this.stgit?.highlightFile()),
-            cmd('cancelHighlighting', () => this.stgit?.cancelHighlighting()),
-            cmd('openDiffEditor', () => this.stgit?.openDiffEditor()),
-            cmd('showDiff', () => this.stgit?.showDiff()),
-            cmd('openDiff', () => this.stgit?.openDiff()),
-            cmd('setHistorySize', () => this.stgit?.setHistorySize()),
-            cmd('commitOrUncommitPatches',
-                () => this.stgit?.commitOrUncommitPatches()),
-            cmd('revertChanges', () => this.stgit?.revertChanges()),
-            cmd('undo', () => this.stgit?.undo()),
-            cmd('hardUndo', () => this.stgit?.hardUndo()),
-            cmd('redo', () => this.stgit?.redo()),
-            cmd('help', () => this.stgit?.help()),
-            cmd('navigateToParent', () => this.stgit?.navigateToParent()),
+            globalCmd("open", () => this.openStgit()),
+            cmd("refresh", () => this.stgit?.refresh()),
+            cmd("repair", () => this.stgit?.repair()),
+            cmd("refreshSpecific", () => this.stgit?.refreshSpecific()),
+            cmd("createBranch", () => this.stgit?.createBranch()),
+            cmd("switchBranch", () => this.stgit?.switchBranch()),
+            cmd("rebase", () => this.stgit?.rebase()),
+            cmd("gitFetch", () => this.stgit?.gitFetch()),
+            cmd("gitPush", () => this.stgit?.gitPush("fast-forward")),
+            cmd("gitForcePush", () => this.stgit?.gitPush("force")),
+            cmd("selectRemote", () => this.stgit?.selectRemote()),
+            cmd("selectUpstreamBranch", () => this.stgit?.selectUpstreamBranch()),
+            cmd("reload", () => this.stgit?.reload()),
+            cmd("resolveConflict", () => this.stgit?.resolveConflict()),
+            cmd("gotoPatch", () => this.stgit?.gotoPatch()),
+            cmd("markPatch", () => this.stgit?.markPatch()),
+            cmd("unmarkPatch", () => this.stgit?.unmarkPatch()),
+            cmd("toggleExpand", () => this.stgit?.toggleExpand()),
+            cmd("toggleChanges", () => this.stgit?.toggleChanges()),
+            cmd("toggleShowingUnknown", () => this.stgit?.toggleShowingUnknownFiles()),
+            cmd("createPatch", () => this.stgit?.createPatch()),
+            cmd("newPatch", () => this.stgit?.newPatch()),
+            cmd("pushOrPopPatches", () => this.stgit?.pushOrPopPatches()),
+            cmd("pushNextPatch", () => this.stgit?.pushNextPatch()),
+            cmd("popCurrentPatch", () => this.stgit?.popCurrentPatch()),
+            cmd("movePatchesTo", () => this.stgit?.movePatchesTo()),
+            cmd("commentCreatePatch", () => this.stgit?.commentCreatePatch()),
+            cmd("completePatchEdit", () => this.stgit?.completePatchEdit()),
+            cmd("cancel", () => this.stgit?.cancel()),
+            cmd("editCommitMessage", () => this.stgit?.editCommitMessage()),
+            cmd("copyCommitSha", () => this.stgit?.copyCommitSha()),
+            cmd("squashPatches", () => this.stgit?.squashPatches()),
+            cmd("deletePatches", () => this.stgit?.deletePatches()),
+            cmd("highlightFile", () => this.stgit?.highlightFile()),
+            cmd("cancelHighlighting", () => this.stgit?.cancelHighlighting()),
+            cmd("openDiffEditor", () => this.stgit?.openDiffEditor()),
+            cmd("showDiff", () => this.stgit?.showDiff()),
+            cmd("openDiff", () => this.stgit?.openDiff()),
+            cmd("setHistorySize", () => this.stgit?.setHistorySize()),
+            cmd("commitOrUncommitPatches", () => this.stgit?.commitOrUncommitPatches()),
+            cmd("revertChanges", () => this.stgit?.revertChanges()),
+            cmd("undo", () => this.stgit?.undo()),
+            cmd("hardUndo", () => this.stgit?.hardUndo()),
+            cmd("redo", () => this.stgit?.redo()),
+            cmd("help", () => this.stgit?.help()),
+            cmd("navigateToParent", () => this.stgit?.navigateToParent()),
 
-            workspace.registerTextDocumentContentProvider('stgit', provider),
+            workspace.registerTextDocumentContentProvider("stgit", provider),
             vscode.languages.registerFoldingRangeProvider(
-                { scheme: 'stgit', language: 'stgit.buffer' }, {
+                { scheme: "stgit", language: "stgit.buffer" },
+                {
                     provideFoldingRanges: () => [],
-                }),
+                },
+            ),
 
             workspace.onDidCloseTextDocument((doc) => {
                 if (doc === this.stgit?.doc) {
@@ -1746,10 +1544,8 @@ class StGitMode {
             workspace.onDidSaveTextDocument((doc) => {
                 this.stgit?.reloadWorkTree();
             }),
-            window.onDidChangeActiveTextEditor(editor => {
-                if (editor?.document.uri.scheme === 'file' && this.stgit)
-                    void this.repositoryFollower.followFile(
-                        editor.document.uri.fsPath);
+            window.onDidChangeActiveTextEditor((editor) => {
+                if (editor?.document.uri.scheme === "file" && this.stgit) void this.repositoryFollower.followFile(editor.document.uri.fsPath);
             }),
         );
     }
@@ -1769,7 +1565,7 @@ class StGitMode {
     private async openStgit() {
         if (this.stgit) {
             const scheme = window.activeTextEditor?.document.uri.scheme || "";
-            const isInStgitBuffer = ['stgit', 'stgit-diff'].includes(scheme);
+            const isInStgitBuffer = ["stgit", "stgit-diff"].includes(scheme);
             if (!isInStgitBuffer) {
                 const repo = await RepositoryInfo.lookup();
                 if (!repo) {
@@ -1788,14 +1584,15 @@ class StGitMode {
                 return;
             }
             RepositoryInfo.setSelectedRepo(repo);
-            const doc = await vscode.languages.setTextDocumentLanguage(
-                await workspace.openTextDocument(this.uri), 'stgit.buffer');
-            this.stgit = new StGitDoc(doc, repo,
+            const doc = await vscode.languages.setTextDocumentLanguage(await workspace.openTextDocument(this.uri), "stgit.buffer");
+            this.stgit = new StGitDoc(
+                doc,
+                repo,
                 () => {
-                    if (this.stgit?.documentContents !== doc.getText())
-                        this.changeEmitter.fire(doc.uri);
+                    if (this.stgit?.documentContents !== doc.getText()) this.changeEmitter.fire(doc.uri);
                 },
-                this.commentController);
+                this.commentController,
+            );
         }
     }
     private get uri() {

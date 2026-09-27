@@ -1,6 +1,8 @@
-import * as path from 'path';
+import * as path from "path";
 
-interface Repository { gitDir: string }
+interface Repository {
+    gitDir: string;
+}
 
 export interface RepositoryFollowerSources<Repo extends Repository, Context> {
     lookup(directory: string): Promise<Repo | null>;
@@ -12,20 +14,14 @@ export interface RepositoryFollowerSources<Repo extends Repository, Context> {
 export class RepositoryFollower<Repo extends Repository, Context> {
     private requestId = 0;
 
-    constructor(
-        private readonly sources: RepositoryFollowerSources<Repo, Context>,
-    ) { }
+    constructor(private readonly sources: RepositoryFollowerSources<Repo, Context>) {}
 
     async followFile(file: string) {
         const requestId = ++this.requestId;
         const repo = await this.sources.lookup(path.dirname(file));
-        if (!repo || requestId !== this.requestId ||
-            repo.gitDir === this.sources.current()?.gitDir)
-            return;
+        if (!repo || requestId !== this.requestId || repo.gitDir === this.sources.current()?.gitDir) return;
         const context = await this.sources.loadContext(repo);
-        if (requestId === this.requestId && this.sources.current() &&
-            repo.gitDir !== this.sources.current()?.gitDir)
-            this.sources.switchTo(repo, context);
+        if (requestId === this.requestId && this.sources.current() && repo.gitDir !== this.sources.current()?.gitDir) this.sources.switchTo(repo, context);
     }
 
     cancel() {

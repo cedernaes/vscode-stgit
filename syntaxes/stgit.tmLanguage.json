@@ -1,63 +1,75 @@
 {
-	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-	"name": "StGit",
-	"patterns": [
-		{ "include": "#outer" }
-	],
-	"repository": {
-		"desc": {
-			"patterns": [{
-				"match": "\\[[A-Za-z0-9 ]*\\]",
-				"name": "keyword.operator"
-			}, {
-				"match": "\\(empty\\) ",
-				"name": "invalid"
-			}]
-		},
-		"history": {
-			"patterns": [{
-				"begin": "^  (?=[^ ])",
-				"end": "$",
-				"contentName": "string.regexp history.stgit"
-			}, {
-				"patterns": [{ "include": "#outer" }]
-			}]
-		},
-		"outer": {
-			"patterns": [{
-				"begin": "^Branch",
-				"while": "(?=^(  |$))",
-				"patterns": [{ "include": "#history" }]
-			}, {
-				"begin": "^[+][* ]",
-				"end": "$",
-				"contentName": "entity.name.function patch.stgit",
-				"patterns": [{ "include": "#desc" }]
-			}, {
-				"begin": "^>[* ]",
-				"end": "$",
-				"contentName": "markup.bold patch.stgit curpatch.stgit",
-				"patterns": [{ "include": "#desc" }]
-			}, {
-				"begin": "^-[* ]",
-				"end": "$",
-				"contentName": "markup.deleted popped.stgit"
-			}, {
-				"begin": "^![* ]",
-				"end": "$",
-				"contentName": "invalid"
-			}, {
-				"match": "^  (Index|Work Tree)",
-				"name": "variable index.stgit"
-			}, {
-				"match": "^    [a-zA-Z]+",
-				"name": "invalid"
-			}, {
-				"match": "^    <.*>",
-				"name": "comment"
-			}
-
-		]}
-	},
-	"scopeName": "source.stgit"
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "name": "StGit",
+    "patterns": [{ "include": "#outer" }],
+    "repository": {
+        "desc": {
+            "patterns": [
+                {
+                    "match": "\\[[A-Za-z0-9 ]*\\]",
+                    "name": "keyword.operator"
+                },
+                {
+                    "match": "\\(empty\\) ",
+                    "name": "invalid"
+                }
+            ]
+        },
+        "history": {
+            "patterns": [
+                {
+                    "begin": "^  (?=[^ ])",
+                    "end": "$",
+                    "contentName": "string.regexp history.stgit"
+                },
+                {
+                    "patterns": [{ "include": "#outer" }]
+                }
+            ]
+        },
+        "outer": {
+            "patterns": [
+                {
+                    "begin": "^Branch",
+                    "while": "(?=^(  |$))",
+                    "patterns": [{ "include": "#history" }]
+                },
+                {
+                    "begin": "^[+][* ]",
+                    "end": "$",
+                    "contentName": "entity.name.function patch.stgit",
+                    "patterns": [{ "include": "#desc" }]
+                },
+                {
+                    "begin": "^>[* ]",
+                    "end": "$",
+                    "contentName": "markup.bold patch.stgit curpatch.stgit",
+                    "patterns": [{ "include": "#desc" }]
+                },
+                {
+                    "begin": "^-[* ]",
+                    "end": "$",
+                    "contentName": "markup.deleted popped.stgit"
+                },
+                {
+                    "begin": "^![* ]",
+                    "end": "$",
+                    "contentName": "invalid"
+                },
+                {
+                    "match": "^  (Index|Work Tree)",
+                    "name": "variable index.stgit"
+                },
+                {
+                    "match": "^    [a-zA-Z]+",
+                    "name": "invalid"
+                },
+                {
+                    "match": "^    <.*>",
+                    "name": "comment"
+                }
+            ]
+        }
+    },
+    "scopeName": "source.stgit"
 }

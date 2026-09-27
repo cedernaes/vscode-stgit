@@ -13,6 +13,7 @@ repository. Changes up to that version are documented in its
 ## [Unreleased]
 
 ### Added
+
 - Add support for navigating into/out of submodules with "Enter" and "-" keys.
 - Add a command for copying the commit SHA of the selected patch
 - Honour the effective `format.pretty` Git configuration in history entries
@@ -24,6 +25,7 @@ repository. Changes up to that version are documented in its
 - Also show the expansion caret on committed rows
 
 ### Changed
+
 - Let the user switch branch when only submodules are changed.
 - Rename "StGit: Undo recent undo" command to "StGit: Redo Operation" to align with the stgit CLI
 - Avoid redundant StGit document updates during navigation
@@ -31,6 +33,7 @@ repository. Changes up to that version are documented in its
 - Make the folding mechanism more intuitive
 
 ### Fixed
+
 - Refresh a stale diff after staging a hunk
 - Stabilize the cursor position after staging diff hunks
 - Keep the StGit cursor on its row across redraws
