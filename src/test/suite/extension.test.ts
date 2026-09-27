@@ -72,7 +72,7 @@ suite("Extension Test Suite", () => {
         await extension.activate();
         const uri = vscode.Uri.from({ scheme: "stgit", path: "/StGit" });
         const doc = await vscode.workspace.openTextDocument(uri);
-        assert.strictEqual(doc.languageId, "stgit.buffer");
+        assert.strictEqual(doc.languageId, "stgit-buffer");
         const ranges = await vscode.commands.executeCommand<vscode.FoldingRange[]>("vscode.executeFoldingRangeProvider", uri);
         assert.deepStrictEqual(ranges, []);
     });

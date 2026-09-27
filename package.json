@@ -28,7 +28,7 @@
     "icon": "images/icon.png",
     "contributes": {
         "configurationDefaults": {
-            "[stgit.buffer]": {
+            "[stgit-buffer]": {
                 "editor.folding": false
             }
         },
@@ -78,7 +78,7 @@
         },
         "languages": [
             {
-                "id": "stgit.buffer",
+                "id": "stgit-buffer",
                 "filenames": [
                     "StGit"
                 ]
@@ -86,7 +86,7 @@
         ],
         "grammars": [
             {
-                "language": "stgit.buffer",
+                "language": "stgit-buffer",
                 "scopeName": "source.stgit",
                 "path": "./syntaxes/stgit.tmLanguage.json"
             }

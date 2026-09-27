@@ -26,6 +26,7 @@ repository. Changes up to that version are documented in its
 
 ### Changed
 
+- **BREAKING:** The language of the StGit document was renamed from `stgit.buffer` to `stgit-buffer`, since VS Code fails to apply defaults to language IDs containing dots. Settings under `[stgit.buffer]` must be moved to `[stgit-buffer]`.
 - Let the user switch branch when only submodules are changed.
 - Rename "StGit: Undo recent undo" command to "StGit: Redo Operation" to align with the stgit CLI
 - Avoid redundant StGit document updates during navigation

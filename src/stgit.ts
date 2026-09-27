@@ -1527,7 +1527,7 @@ class StGitMode {
 
             workspace.registerTextDocumentContentProvider("stgit", provider),
             vscode.languages.registerFoldingRangeProvider(
-                { scheme: "stgit", language: "stgit.buffer" },
+                { scheme: "stgit", language: "stgit-buffer" },
                 {
                     provideFoldingRanges: () => [],
                 },
@@ -1584,7 +1584,7 @@ class StGitMode {
                 return;
             }
             RepositoryInfo.setSelectedRepo(repo);
-            const doc = await vscode.languages.setTextDocumentLanguage(await workspace.openTextDocument(this.uri), "stgit.buffer");
+            const doc = await vscode.languages.setTextDocumentLanguage(await workspace.openTextDocument(this.uri), "stgit-buffer");
             this.stgit = new StGitDoc(
                 doc,
                 repo,
