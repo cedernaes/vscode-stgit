@@ -175,7 +175,7 @@
         }, {
             "command": "stgit.gitForcePush",
             "category": "StGit",
-            "title": "Push Changes"
+            "title": "Push Changes (force)"
         }, {
             "command": "stgit.gitFetch",
             "category": "StGit",
