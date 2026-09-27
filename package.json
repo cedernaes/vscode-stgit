@@ -1,7 +1,7 @@
 {
     "name": "stgit",
-    "displayName": "StGit",
-    "description": "Git patch management tool using StGit",
+    "displayName": "StGit Revived",
+    "description": "Git patch management tool using StGit. Actively maintained fork of srydh/vscode-stgit.",
     "version": "0.9.11",
     "engines": {
         "vscode": "^1.91.0"
@@ -9,13 +9,22 @@
     "categories": [
         "SCM Providers"
     ],
+    "keywords": [
+        "stg",
+        "stgit",
+        "stacked git",
+        "patch",
+        "patch series",
+        "git"
+    ],
     "activationEvents": [],
     "main": "./out/extension.js",
     "license": "BSD-2-Clause",
     "repository": {
-        "url": "https://github.com/srydh/vscode-stgit"
+        "type": "git",
+        "url": "https://github.com/cedernaes/vscode-stgit"
     },
-    "publisher": "samuelrydh",
+    "publisher": "cedernaes",
     "icon": "images/icon.png",
     "contributes": {
         "configuration": {

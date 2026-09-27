@@ -1,5 +1,13 @@
 # StGit VSCode Support
 
+> A maintained fork of [srydh/vscode-stgit](https://github.com/srydh/vscode-stgit). This fork is a drop-in replacement.
+
+> [!IMPORTANT]
+>
+> **You must uninstall the original `samuelrydh.stgit` extension before installing this one.** Both
+> contribute the same command and language identifiers, and VSCode has no way to resolve
+> the conflict.
+
 The main purpose of this extension is making it easy to modify, amend, reorder, squash or split commits during development with VSCode.
 
 This extension provides a frontend to StGit, which is an external command line tool for managing patch series in the form of Git commits. Refer to the [StGit homepage](https://stacked-git.github.io/) for more details about StGit.
@@ -39,4 +47,4 @@ The StGit extension can be used together with the popular Vim mode for VsCode, b
 ## Release Notes
 
 The latest release notes are available
-[here](https://github.com/srydh/vscode-stgit/blob/main/CHANGELOG.md).
+[here](https://github.com/cedernaes/vscode-stgit/blob/main/CHANGELOG.md).
