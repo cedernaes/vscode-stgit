@@ -12,6 +12,8 @@ repository. Changes up to that version are documented in its
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-27
+
 ### Added
 
 - Added support for navigating into and out of submodules with the "Enter" and "-" keys.
