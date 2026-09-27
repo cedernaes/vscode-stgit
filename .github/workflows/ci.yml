@@ -61,7 +61,7 @@ jobs:
             - run: npm ci
 
             - name: Package the extension
-              run: npx vsce package --out stgit.vsix
+              run: npx vsce package --out stgit-revived.vsix
 
             - name: List the packaged files
-              run: unzip -l stgit.vsix
+              run: unzip -l stgit-revived.vsix

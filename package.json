@@ -1,5 +1,5 @@
 {
-    "name": "stgit",
+    "name": "stgit-revived",
     "displayName": "StGit Revived",
     "description": "Git patch management tool using StGit. Actively maintained fork of srydh/vscode-stgit.",
     "version": "0.9.11",

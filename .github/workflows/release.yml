@@ -62,7 +62,7 @@ jobs:
                       > "$RUNNER_TEMP/changelog-notes.md"
                   echo "version=$version" >> "$GITHUB_OUTPUT"
                   echo "tag=v$version" >> "$GITHUB_OUTPUT"
-                  echo "vsix=stgit-$version.vsix" >> "$GITHUB_OUTPUT"
+                  echo "vsix=stgit-revived-$version.vsix" >> "$GITHUB_OUTPUT"
                   git --no-pager diff --stat
 
             - name: Package the extension

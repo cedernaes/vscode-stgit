@@ -67,7 +67,7 @@ suite("Extension Test Suite", () => {
     });
 
     test("Disables native folding in the StGit document", async () => {
-        const extension = vscode.extensions.getExtension("cedernaes.stgit");
+        const extension = vscode.extensions.getExtension("cedernaes.stgit-revived");
         assert.ok(extension);
         await extension.activate();
         const uri = vscode.Uri.from({ scheme: "stgit", path: "/StGit" });
