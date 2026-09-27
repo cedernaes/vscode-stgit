@@ -8,20 +8,13 @@
   "extends": [
     "eslint:recommended",
     "plugin:@typescript-eslint/eslint-recommended",
-    "plugin:@typescript-eslint/recommended"
+    "plugin:@typescript-eslint/recommended",
+    // Leave all formatting to prettier; must come last.
+    "prettier"
   ],
   "rules": {
-    "no-trailing-spaces": ["error"],
-    "keyword-spacing": ["error", { "before": true, "after": true }],
     "max-len": ["error", { "code": 180 }],
-    "semi": "off",
-    "indent": ["error", 4, {
-      "CallExpression": { "arguments": "off" },
-      "FunctionExpression": { "parameters": "off" },
-      "FunctionDeclaration": { "parameters": "off" }
-    }],
     //"unused-imports/no-unused-imports": "error",
-    "@typescript-eslint/semi": ["error"],
     "@typescript-eslint/no-unused-vars": "off",
     "@typescript-eslint/no-explicit-any": "off",
     "@typescript-eslint/no-non-null-assertion": "off"
