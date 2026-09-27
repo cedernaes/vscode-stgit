@@ -1,7 +1,7 @@
 {
     "name": "stgit",
-    "displayName": "StGit",
-    "description": "Git patch management tool using StGit",
+    "displayName": "StGit Revived",
+    "description": "Git patch management tool using StGit. Actively maintained fork of srydh/vscode-stgit.",
     "version": "0.9.11",
     "engines": {
         "vscode": "^1.91.0"
@@ -9,15 +9,29 @@
     "categories": [
         "SCM Providers"
     ],
+    "keywords": [
+        "stg",
+        "stgit",
+        "stacked git",
+        "patch",
+        "patch series",
+        "git"
+    ],
     "activationEvents": [],
     "main": "./out/extension.js",
     "license": "BSD-2-Clause",
     "repository": {
-        "url": "https://github.com/srydh/vscode-stgit"
+        "type": "git",
+        "url": "https://github.com/cedernaes/vscode-stgit"
     },
-    "publisher": "samuelrydh",
+    "publisher": "cedernaes",
     "icon": "images/icon.png",
     "contributes": {
+        "configurationDefaults": {
+            "[stgit.buffer]": {
+                "editor.folding": false
+            }
+        },
         "configuration": {
             "title": "StGit",
             "properties": {
@@ -85,6 +99,10 @@
             "command": "stgit.editCommitMessage",
             "category": "StGit",
             "title": "Edit Commit Message"
+        }, {
+            "command": "stgit.copyCommitSha",
+            "category": "StGit",
+            "title": "Copy Full Commit SHA"
         }, {
             "command": "stgit.squashPatches",
             "category": "StGit",
@@ -157,7 +175,7 @@
         }, {
             "command": "stgit.gitForcePush",
             "category": "StGit",
-            "title": "Push Changes"
+            "title": "Push Changes (force)"
         }, {
             "command": "stgit.gitFetch",
             "category": "StGit",
@@ -233,7 +251,11 @@
         }, {
             "command": "stgit.redo",
             "category": "StGit",
-            "title": "Undo Recent Undo"
+            "title": "Redo Operation"
+        }, {
+            "command": "stgit.navigateToParent",
+            "category": "StGit",
+            "title": "Navigate to Parent Repository (from submodule)"
         }, {
             "command": "stgit.refresh",
             "category": "StGit",
@@ -410,6 +432,10 @@
         }, {
             "key": "enter",
             "command": "stgit.toggleExpand",
+            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+        }, {
+            "key": "-",
+            "command": "stgit.navigateToParent",
             "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
         }, {
             "key": "t",

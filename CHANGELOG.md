@@ -1,55 +1,36 @@
-# Change Log
+# Changelog
 
-<!--
-Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
--->
+All notable changes to this extension are documented in this file.
 
-## 0.9.11 (unreleased)
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## 0.9.10 (2025-07-12)
-- Improve switching between workspaces
-- Add new "StGit: create branch" command (C-c S-b)
+This extension is a fork of `samuelrydh.stgit`, which was released up to version
+0.9.10 from the now archived [srydh/vscode-stgit](https://github.com/srydh/vscode-stgit)
+repository. Changes up to that version are documented in its
+[changelog](https://github.com/srydh/vscode-stgit/blob/main/CHANGELOG.md).
 
-## 0.9.9 (2025-07-02)
-- Add support for multiple workspaces
+## [Unreleased]
 
-## 0.9.8 (2024-11-16)
-- Yet another try to workaround the comment editor focus issue
+### Added
+- Add support for navigating into/out of submodules with "Enter" and "-" keys.
+- Add a command for copying the commit SHA of the selected patch
+- Honour the effective `format.pretty` Git configuration in history entries
+- Show ellipses after commit titles that have a non-empty message body
+- Recognize renamed files and show the likeness in percent
+- Automatically reload StGit state after external changes
+- Follow the active repository in the StGit panel
+- Indicate in the StGit buffer whether untracked files are shown
+- Also show the expansion caret on committed rows
 
-## 0.9.7 (2024-07-18)
-- Make the workaround for a comment editor focus issue more robust
+### Changed
+- Let the user switch branch when only submodules are changed.
+- Rename "StGit: Undo recent undo" command to "StGit: Redo Operation" to align with the stgit CLI
+- Avoid redundant StGit document updates during navigation
+- List worktree changes with a single raw Git diff
+- Make the folding mechanism more intuitive
 
-## 0.9.6 (2024-07-15)
-- Restore functionality of the C-c C-c keyboard shortcut
-which dismisses the commit editor and performs the commit. The shortcut was broken by a namechange in the latest VSCode release.
-- Add support for creating new branches
-- Work around a focus issue with the comment editor
-
-## 0.9.5 (2023-06-08)
-- Fix a bug where the upstream setting was not always updated at branch switch
-
-## 0.9.4 (2023-05-31)
-- Make all commands show up in the built-in help. Previously,
-some commands were missing (like rebase, fetch and push).
-
-## 0.9.3 (2023-05-30)
-- Add status bar messages at successful push or fetch
-- Get user confirmation before pushing a branch
-- Get user confirmation before performing a hard undo
-
-## 0.9.2 (2023-05-29)
-- Add support for setting the upstream branch
-- Add support for fetch and push operations
-- Report all errors also in the log
-- Add support for initiating GitHub pull requests after a push
-
-## 0.9.1 (2022-02-08)
-- Do not filter StGit error output when using StGit 2.x
-- Ignore StGit open key binding when terminal is focused
-- Ignore most StGit key bindings when comment editor is open
-
-## 0.9.0 (2022-09-02)
-- Support for marking patches modifying the same files as specified file/patch
-- Report when a rebase operation is aborted
-- The Git history is now given a gray colorization
-- Initial implementation
+### Fixed
+- Refresh a stale diff after staging a hunk
+- Stabilize the cursor position after staging diff hunks
+- Keep the StGit cursor on its row across redraws

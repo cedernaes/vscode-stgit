@@ -3,12 +3,89 @@
 
 import * as vscode from 'vscode';
 import { workspace, commands, window } from 'vscode';
-import { openAndShowDiffDocument, refreshDiff } from './diff-provider';
+import {
+    openAndShowDiffDocument, openDiffDocument, refreshDiff,
+} from './diff-provider';
 import { info } from './extension';
 import { reloadIndexAndWorkTree } from './stgit';
 import { isUnmerged, updateIndex } from './git';
 import { runCommand } from './util';
 import { RepositoryInfo } from './repo';
+
+const SPLITS = /,splits=([0-9;]*)/;
+let diffDocumentVersion = 0;
+
+function splitLines(uri: vscode.Uri): number[] {
+    const spec = uri.fragment.match(SPLITS)?.[1] ?? "";
+    return spec ? spec.split(";").map(x => parseInt(x)) : [];
+}
+
+function withSplitLines(uri: vscode.Uri, splits: number[]): vscode.Uri {
+    const splitsFragment = splits.length ?
+        `,splits=${splits.join(";")}` : "";
+    const fragment = uri.fragment.replace(SPLITS, "") + splitsFragment;
+    return uri.with({ fragment });
+}
+
+export interface HunkTarget {
+    path: string;
+    fromLine: number;
+    toLine: number;
+    firstLine: string;
+    split: boolean;
+}
+
+function stripDiffPath(path: string) {
+    const value = path.slice(4);
+    return value.startsWith("/") ? path : value.slice(value.indexOf("/") + 1);
+}
+
+export function findHunkTargetLine(
+    lines: readonly string[],
+    target: HunkTarget,
+    useToLine: boolean,
+): number | null {
+    let path: string | null = null;
+    let fromLine = 0;
+    let toLine = 0;
+    let fallback: number | null = null;
+
+    for (let i = 0; i < lines.length; i++) {
+        const text = lines[i];
+        if (text.startsWith("--- ")) {
+            const toPath = lines[i + 1] ?? "";
+            path = toPath.startsWith("+++ ") ? stripDiffPath(toPath) : null;
+            continue;
+        }
+        const hunk = text.match(
+            /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+        if (hunk) {
+            fromLine = parseInt(hunk[1]) - 1;
+            toLine = parseInt(hunk[2]) - 1;
+            const line = useToLine ? toLine : fromLine;
+            const targetLine = useToLine ? target.toLine : target.fromLine;
+            if (!target.split && path === target.path && line === targetLine)
+                return i;
+            continue;
+        }
+        if (!target.split || path !== target.path ||
+            !" +-\\".includes(text[0] ?? ""))
+            continue;
+
+        const line = useToLine ? toLine : fromLine;
+        const targetLine = useToLine ? target.toLine : target.fromLine;
+        if (line === targetLine) {
+            fallback ??= i;
+            if (text === target.firstLine)
+                return i;
+        }
+        if (text[0] === ' ' || text[0] === '-')
+            fromLine++;
+        if (text[0] === ' ' || text[0] === '+')
+            toLine++;
+    }
+    return fallback;
+}
 
 function locateLineInDoc(
     doc: vscode.TextDocument,
@@ -46,14 +123,8 @@ class DiffHeader {
         if (!toStr.startsWith("+++ "))
             return null;
 
-        function stripPath(path: string) {
-            const s = path.slice(4);
-            if (!s.startsWith("/"))
-                return s.slice(s.indexOf("/") + 1);
-            return path;
-        }
-        const fromPath = stripPath(fromStr);
-        const toPath = stripPath(toStr);
+        const fromPath = stripDiffPath(fromStr);
+        const toPath = stripDiffPath(toStr);
 
         return new DiffHeader(fromPath, toPath);
     }
@@ -300,10 +371,23 @@ class DiffMode {
     }
 
     private async stageOrUnstageHunk(opts: { stage: boolean }) {
+        const editor = window.activeTextEditor;
         const hunk = this.hunk;
         const header = this.getHeader(hunk);
-        if (!hunk || !header)
+        if (!editor || !hunk || !header)
             return;
+        const uri = editor.document.uri;
+        const splits = splitLines(uri);
+        const nextHunk = this.findHunk(
+            editor.document, hunk.line + hunk.numHunkLines);
+        const nextHeader = this.getHeader(nextHunk);
+        const target = nextHunk && nextHeader ? {
+            path: nextHeader.toPath,
+            fromLine: nextHunk.fromText.srcLine,
+            toLine: nextHunk.toText.srcLine,
+            firstLine: editor.document.lineAt(nextHunk.line + 1).text,
+            split: splits.includes(nextHunk.line),
+        } : null;
         const path = header.toPath;
         const indexResult = await runCommand(
             'git', ['show', `:${path}`], { trim: false });
@@ -336,8 +420,23 @@ class DiffMode {
             lines.pop();
         const newContents = lines.join(usesCRLF ? '\r\n' : '\n');
         await updateIndex(header.toPath, { data: newContents });
+        const newUri = withSplitLines(uri, []).with({
+            query: `version=${++diffDocumentVersion}`,
+        });
+        const newDoc = await openDiffDocument(newUri);
+        const newLines = Array.from(
+            { length: newDoc.lineCount },
+            (_, line) => newDoc.lineAt(line).text);
+        const targetLine = target ?
+            findHunkTargetLine(newLines, target, opts.stage) : null;
+        const line = targetLine ?? Math.max(newDoc.lineCount - 1, 0);
+        const position = new vscode.Position(line, 0);
+        await window.showTextDocument(newDoc, {
+            viewColumn: editor.viewColumn,
+            preview: true,
+            selection: new vscode.Selection(position, position),
+        });
         reloadIndexAndWorkTree();
-        this.gotoNextHunk();
     }
 
     stageHunk() {
@@ -349,11 +448,8 @@ class DiffMode {
     }
 
     async splitHunk(editor: vscode.TextEditor) {
-        const SPLITS = /,splits=([0-9;]*)/;
         const uri = editor.document.uri;
-        const frag = uri.fragment;
-        const spec = frag.match(SPLITS)?.[1] ?? "";
-        const oldSplits = spec ? spec.split(";").map(x => parseInt(x)) : [];
+        const oldSplits = splitLines(uri);
 
         const curLine = editor.selection.start.line;
         const line = editor.selection.start.line;
@@ -375,9 +471,7 @@ class DiffMode {
             splits = [...oldSplits.map(s => s > line ? s + 1 : s), line];
             splits.sort((a, b) => a - b);
         }
-        const splitsFrag = `,splits=${splits.join(";")}`;
-        const newFrag = frag.replace(SPLITS, "") + splitsFrag;
-        const newUri = uri.with({ fragment: newFrag });
+        const newUri = withSplitLines(uri, splits);
         refreshDiff(newUri);
         openAndShowDiffDocument(newUri, {
             selection: new vscode.Selection(curLine, 0, curLine, 0),

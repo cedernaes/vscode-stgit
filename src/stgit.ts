@@ -9,8 +9,11 @@ import { log, info, showStatusMessage, getUserConfirmation } from './extension';
 import { uncommitFiles } from './git';
 import { RepositoryInfo } from './repo';
 import { getStGitConfig } from './config';
+import { StGitStateMonitor } from './state-monitor';
+import { RepositoryFollower } from './repository-follower';
+import { RepoDisplayLoads, RepoReader } from './repo-reader';
 
-const RENAMEOPTS: readonly string[] = ['--no-renames'];
+const RENAMEOPTS: readonly string[] = ['--find-renames'];
 
 interface IndexStageInfo {
     perm: string;
@@ -19,7 +22,7 @@ interface IndexStageInfo {
 }
 type DeltaKind = keyof (typeof Delta.STATUS_MESSAGE);
 
-class Delta {
+export class Delta {
     private indexStageInfo: IndexStageInfo[] = [];
 
     static readonly STATUS_MESSAGE = {
@@ -55,6 +58,9 @@ class Delta {
     get conflict() {
         return this.status.startsWith('U');
     }
+    get isSubmodule() {
+        return this.srcMode === '160000' || this.destMode === '160000';
+    }
     private get stageInfoString() {
         if (!this.indexStageInfo.length)
             return "";
@@ -80,11 +86,13 @@ class Delta {
     }
     get docLine() {
         const what = Delta.STATUS_MESSAGE[this.status];
-        const s = `${what}${this.permissionDelta}`;
+        const similarity = this.status === 'R' ? ` ${Number(this.score)}%` : '';
+        const s = `${what}${similarity}${this.permissionDelta}`;
         const dest = this.destPath ? ` -> ${this.destPath}` : '';
-        const s2 = `    ${s.padEnd(16)} ${this.path}${dest}`;
+        const submoduleMarker = this.isSubmodule ? ' [submodule]' : '';
+        const s2 = `    ${s.padEnd(16)} ${this.path}${dest}${submoduleMarker}`;
         const sinfo = this.stageInfoString;
-        if (!sinfo && !dest)
+        if (!sinfo && !dest && !submoduleMarker)
             return s2;
         return `${s2.padEnd(50)} ${sinfo}`;
     }
@@ -132,6 +140,7 @@ abstract class Patch {
     lineCount = 0;
 
     constructor(
+        protected readonly reader: RepoReader,
         public readonly description: string,
         public readonly label: string,
         public readonly kind: '+' | '-' | 'H' | 'I' | 'W',
@@ -147,7 +156,10 @@ abstract class Patch {
     getLines(): string[] {
         const m = this.marked ? '*' : ' ';
         const empty = this.empty ? "(empty) " : "";
-        const lines = [`${this.symbol}${m}${empty}${this.description}`];
+        const caret = this.expanded ? '▾' : '▸';
+        const lines = [
+            `${this.symbol}${m} ${caret} ${empty}${this.description}`,
+        ];
         if (this.expanded) {
             for (const d of this.deltas)
                 lines.push(d.docLine);
@@ -187,7 +199,7 @@ abstract class Patch {
         if (!this.commitMessage) {
             const sha = await this.getSha();
             if (sha) {
-                this.commitMessage = await run(
+                this.commitMessage = await this.reader.run(
                     'git', ['show', '-s', '--format=%B', sha]);
             }
         }
@@ -200,65 +212,110 @@ abstract class Patch {
     }
 }
 
+export function formatCommitDescription(
+    description: string, commitMessage: string,
+): string {
+    const hasBody = commitMessage.split(/\r?\n/).slice(1)
+        .some(line => line.trim() !== "");
+    return hasBody ? `${description} […]` : description;
+}
+
+export function correspondingLine(
+    previous: string, next: string, line: number,
+): number {
+    const oldLines = previous.split('\n');
+    const newLines = next.split('\n');
+    const text = oldLines[line];
+    if (text === undefined)
+        return Math.min(line, newLines.length - 1);
+    let prefix = 0;
+    while (prefix < oldLines.length && prefix < newLines.length &&
+        oldLines[prefix] === newLines[prefix])
+        prefix++;
+    if (line < prefix)
+        return line;
+    let suffix = 0;
+    while (suffix < oldLines.length - prefix &&
+        suffix < newLines.length - prefix &&
+        oldLines[oldLines.length - suffix - 1] ===
+            newLines[newLines.length - suffix - 1])
+        suffix++;
+    if (line >= oldLines.length - suffix)
+        return line + newLines.length - oldLines.length;
+    const matches = newLines.flatMap((value, index) =>
+        value === text ? [index] : []);
+    if (matches.length)
+        return matches.reduce((best, index) =>
+            Math.abs(index - line) < Math.abs(best - line) ? index : best);
+    return Math.min(line, newLines.length - 1);
+}
+
 class StGitPatch extends Patch {
-    static fromSeries(line: string): Patch {
+    static fromSeries(
+        line: string, commitMessage: string, reader: RepoReader,
+    ): Patch {
         const empty = line[0] === '0';
         const kind = line[1] === '-' ? '-' : '+';
         const symbol = line[1] as '+' | '-' | '>';
-        const label = line.slice(2).split("#")[0].trim();
+        const sha = line.slice(3, 43);
+        const label = line.slice(44).split("#")[0].trim();
         const desc = (line.split("#")[1] ?? "").trim();
-        return new this(desc, label, kind, empty, symbol);
+        const patch = new this(
+            reader, formatCommitDescription(desc, commitMessage),
+            label, kind, empty, symbol);
+        patch.sha = sha;
+        return patch;
     }
     protected async doFetchDetails(): Promise<void> {
-        this.sha = await run('stg', ["id", "--", this.label]);
-        const tree = await run('git', ['diff-tree',
+        this.sha = await this.reader.run('stg', ["id", "--", this.label]);
+        const tree = await this.reader.run('git', ['diff-tree',
             ...RENAMEOPTS, '-z', '--no-commit-id', '-r', this.sha]);
         this.deltas = Delta.fromDiff(tree);
     }
 }
 
-class WorkTree extends Patch {
+export class WorkTree extends Patch {
     constructor(
+        reader: RepoReader,
         private readonly unknownFilesVisible: boolean,
     ) {
-        super("Work Tree", "", 'W', false);
+        super(reader, `Work Tree${unknownFilesVisible ? ' [+untracked]' : ''}`,
+            "", 'W', false);
         this.expanded = true;
     }
     private async fetchUnknownFiles(): Promise<string> {
         if (!this.unknownFilesVisible)
             return "";
-        const unknownFiles = await run(
+        const unknownFiles = await this.reader.run(
             'git', ['ls-files', '--exclude-standard', '-o', '-z']);
-        return unknownFiles.split("\0").filter(x => x).map(x => (
+        return unknownFiles.split("\0").filter(name => name).map(name => (
             ':000000 000000' +
             ' 0000000000000000000000000000000000000000' +
             ' 0000000000000000000000000000000000000000' +
-            ` O\0${x}\0`)).join("");
+            ` O\0${name}\0`)).join("");
     }
-
     protected async doFetchDetails(): Promise<void> {
-        await run('git', ['update-index', '-q', '--refresh']);
         const result = await Promise.all([
-            run('git', ['diff-files', ...RENAMEOPTS, '-z', '-0']),
+            this.reader.run('git', ['diff', '--raw', '--no-renames', '-z']),
             this.fetchUnknownFiles(),
         ]);
-        this.deltas = Delta.fromDiff(result.join(""));
+        this.deltas = Delta.fromDiff(result.join(''));
     }
 }
 
 class Index extends Patch {
-    constructor() {
-        super("Index", "", 'I', false);
+    constructor(reader: RepoReader) {
+        super(reader, "Index", "", 'I', false);
         this.expanded = true;
     }
     protected async doFetchDetails(): Promise<void> {
-        const tree = await run(
+        const tree = await this.reader.run(
             'git', ['diff-index', ...RENAMEOPTS, '-z', '--cached', 'HEAD']);
         const deltas = Delta.fromDiff(tree);
 
         // Fetch information about index stages
         if (deltas.some(x => x.conflict)) {
-            const s = await run('git', ['ls-files', '-u', '-z']);
+            const s = await this.reader.run('git', ['ls-files', '-u', '-z']);
             const entries = s.split("\0");
             const regexp = /([0-9]*) ([0-9a-f]*) ([1-3]*)\t(.*)/;
             for (const d of deltas.filter(d => d.conflict)) {
@@ -280,49 +337,100 @@ class Index extends Patch {
     }
 }
 
-class History extends Patch {
+const DEFAULT_HISTORY_FORMAT = "%h   %s";
+
+async function getHistoryFormat(reader: RepoReader): Promise<string> {
+    let pretty = await reader.run(
+        'git', ['config', '--get', 'format.pretty'],
+        { inhibitLogging: true });
+    for (let depth = 0; pretty && depth < 5; depth++) {
+        if (pretty.startsWith('format:'))
+            return pretty.slice('format:'.length);
+        if (pretty.startsWith('tformat:'))
+            return pretty.slice('tformat:'.length);
+        if (pretty.includes('%'))
+            return pretty;
+        if (pretty === 'oneline')
+            return "%h %s";
+        if (pretty === 'reference')
+            return "%h (%s, %as)";
+        pretty = await reader.run(
+            'git', ['config', '--get', `pretty.${pretty}`],
+            { inhibitLogging: true });
+    }
+    return DEFAULT_HISTORY_FORMAT;
+}
+
+export class History extends Patch {
     protected sha: string;
-    constructor(sha: string, description: string) {
-        super(description, "", 'H', false);
+    constructor(reader: RepoReader, sha: string, description: string) {
+        super(reader, description, "", 'H', false);
         this.sha = sha;
     }
+    getLines(): string[] {
+        const lines = super.getLines();
+        lines[0] = `${this.expanded ? '▾' : '▸'} ${this.description}`;
+        return lines;
+    }
     protected async doFetchDetails(): Promise<void> {
-        const tree = await run('git', ['diff-tree',
+        const tree = await this.reader.run('git', ['diff-tree',
             ...RENAMEOPTS, '-z', '--no-commit-id', '-r', this.sha]);
         this.deltas = Delta.fromDiff(tree);
     }
-    static async fromRev(rev: string, limit: number) {
+    static async fromRev(reader: RepoReader, rev: string, limit: number) {
         if (limit === 0)
             return [];
-        const log = await run('git', [
+        const format = await getHistoryFormat(reader);
+        const log = await reader.run('git', [
             'log', '--reverse', '--first-parent', `-n${limit}`,
-            '--format=%H\t%s', rev]);
+            '--color=never',
+            `--format=%H%x00${format}%x00%B%x00`, rev]
+        );
         if (log === "")
             return [];
-        return log.split("\n").map(s => {
-            const [sha, desc] = s.split("\t");
-            return new History(sha, desc);
-        });
+        const fields = log.split("\0");
+        const history: History[] = [];
+        for (let i = 0; i + 2 < fields.length; i += 3) {
+            const sha = fields[i].trim();
+            const title = fields[i + 1].trim();
+            const description = fields[i + 2].trim();
+            history.push(new History(
+                reader, sha, formatCommitDescription(title, description)
+            ));
+        }
+        return history;
     }
 }
 
 class StGitDoc {
     private unknownFilesVisible = false;
+    private monitor: StGitStateMonitor;
+    private displayLoads: RepoDisplayLoads;
 
     private history: Patch[] = [];
     private applied: Patch[] = [];
     private popped: Patch[] = [];
-    private index: Patch = new Index();
-    private workTree: Patch = new WorkTree(this.unknownFilesVisible);
+    private index: Patch;
+    private workTree: Patch;
     private needRepair = false;
     private stgMissing = false;
     private branchInitialized = true;
     private warnedAboutMissingStgBinary = false;
     private historySize = 5;
+    private loadedHistorySize = 5;
     private branchName: string | null = null;
     private remoteName: string | null = null;
     private remoteBranch: string | null = null;
     private newUpstream = false;
+
+    // Submodule navigation context
+    // Stack of parent repos with their relative paths for navigation
+    private parentRepoStack: {
+        repo: RepositoryInfo;
+        relativePath: string;
+        submodulePath: string;
+    }[] = [];
+    private relativePathFromRoot = '';
 
     // start of history
     private baseSha: string | null = null;
@@ -338,6 +446,7 @@ class StGitDoc {
 
     private highlightRanges: vscode.Range[] = [];
     private historyRanges: vscode.Range[] = [];
+    private submoduleRanges: vscode.Range[] = [];
 
     constructor(
         public doc: vscode.TextDocument,
@@ -345,6 +454,11 @@ class StGitDoc {
         public notifyDirty: () => void,
         private commentController: vscode.CommentController,
     ) {
+        this.displayLoads = new RepoDisplayLoads(repo, { run, runCommand },
+            (kind, error) => log(`StGit ${kind} reload failed:`,
+                String(error)));
+        this.index = new Index(this.reader);
+        this.workTree = new WorkTree(this.reader, this.unknownFilesVisible);
         this.subscriptions.push(
             window.onDidChangeVisibleTextEditors(editors => {
                 this.updateEditorDecorations();
@@ -369,11 +483,48 @@ class StGitDoc {
             })
         );
         this.updateConfiguration({ reload: false });
+        this.setupSubmoduleContext(repo);
         this.reload();
         this.openInitialEditor();
+        this.monitor = new StGitStateMonitor(repo, {
+            readState: async currentRepo => {
+                const [series, status] = await Promise.all([
+                    runCommand('stg', ['series', '-ae', '--commit-id=40',
+                        '--description'], {
+                        cwd: currentRepo.topLevelDir, inhibitLogging: true,
+                    }),
+                    runCommand('git', ['status', '--porcelain=v2', '-b'], {
+                        cwd: currentRepo.topLevelDir, inhibitLogging: true,
+                    }),
+                ]);
+                return JSON.stringify([
+                    currentRepo.gitDir, series.ecode, series.stdout,
+                    status.ecode, status.stdout,
+                ]);
+            },
+            watchFiles: (currentRepo, changed) => {
+                const watcher = workspace.createFileSystemWatcher(
+                    new vscode.RelativePattern(
+                        currentRepo.topLevelDir, '**/*'));
+                const onChange = (uri: vscode.Uri) => changed(uri.fsPath);
+                watcher.onDidChange(onChange);
+                watcher.onDidCreate(onChange);
+                watcher.onDidDelete(onChange);
+                return watcher;
+            },
+            reload: () => this.reload(),
+            reloadWorkTree: () => this.reloadIndexAndWorkTree(),
+        });
+        this.monitor.start();
     }
     dispose() {
+        this.displayLoads.dispose();
+        this.monitor.dispose();
         this.subscriptions.forEach(s => s.dispose());
+    }
+
+    private get reader() {
+        return this.displayLoads.currentReader;
     }
 
     private get patches() {
@@ -392,109 +543,142 @@ class StGitDoc {
             this.reload();
     }
 
-    async reloadIndex() {
-        const index = new Index();
-        await index.updateFromOld(this.index);
-        await index.fetchDetails();
-        this.index = index;
-        this.notifyDirty();
-    }
-    async reloadWorkTree() {
-        const workTree = new WorkTree(this.unknownFilesVisible);
-        await workTree.updateFromOld(this.workTree);
-        await workTree.fetchDetails();
-        this.workTree = workTree;
-        this.notifyDirty();
-    }
-    async reloadPatches() {
-        const m = new Map(this.patches.map(p => [p.label, p]));
-        const patches = [];
-
-        const result = await runCommand(
-            'stg', ['series', '-ae', '--description']);
-
-        this.branchInitialized = result.ecode === 0;
-        this.stgMissing = result.ecode < 0;
-
-        if (this.stgMissing) {
-            this.warnAboutMissingStGit();
-        } else if (this.branchInitialized) {
-            const work: Promise<void>[] = [];
-            for (const line of result.stdout.split("\n")) {
-                if (line) {
-                    const p = StGitPatch.fromSeries(line);
-                    const old = m.get(p.label);
-                    if (old)
-                        work.push(p.updateFromOld(old));
-                    patches.push(p);
-                    if (this.highlightPaths)
-                        work.push(p.fetchDetails());
-                }
-            }
-            await Promise.all(work);
-        }
-        this.popped = patches.filter(p => p.kind === '-');
-        this.applied = patches.filter(p => p.kind !== '-');
-        this.notifyDirty();
-    }
-    reload() {
-        this.fetchBranchName();
-        this.fetchUpstreamSpec();
-        this.reloadPatches();
-        this.fetchHistory(this.historySize);
-        this.reloadIndexAndWorkTree();
-        this.checkForRepair();
-    }
-    reloadIndexAndWorkTree() {
-        this.reloadIndex();
-        this.reloadWorkTree();
-    }
-    async fetchUpstreamSpec() {
-        if (this.newUpstream)
+    async setupSubmoduleContext(repo: RepositoryInfo) {
+        const { stack, relativePath } =
+            await RepositoryInfo.buildParentStack(repo);
+        if (this.repo !== repo)
             return;
-        const upstream = await run('git', [
-            'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
-            { inhibitLogging: true });
-        const n = upstream.search("/");
-        const remote = upstream.slice(0, n) || this.remoteName;
-        const remoteBranch = upstream.slice(n + 1) || null;
-        if (this.remoteBranch !== remoteBranch || this.remoteName !== remote) {
-            this.remoteBranch = remoteBranch;
-            this.remoteName = remote;
-            this.notifyDirty();
-        }
+        this.parentRepoStack = stack;
+        this.relativePathFromRoot = relativePath;
     }
-    async fetchBranchName() {
-        const branch = await run('git', ['symbolic-ref', '--short', 'HEAD']);
-        if (branch != this.branchName) {
-            this.branchName = branch === "" ? null : branch;
-            this.notifyDirty();
-        }
+
+    switchRepository(
+        repo: RepositoryInfo,
+        context: Awaited<ReturnType<typeof RepositoryInfo.buildParentStack>>,
+    ) {
+        if (this.repo.gitDir === repo.gitDir)
+            return;
+        this.displayLoads.switchRepository(repo);
+        this.repo = repo;
+        RepositoryInfo.setSelectedRepo(repo);
+        this.monitor.setRepository(repo);
+        this.parentRepoStack = context.stack;
+        this.relativePathFromRoot = context.relativePath;
+        this.history = [];
+        this.applied = [];
+        this.popped = [];
+        this.index = new Index(this.reader);
+        this.workTree = new WorkTree(this.reader, this.unknownFilesVisible);
+        this.baseSha = null;
+        this.branchName = null;
+        this.remoteName = null;
+        this.remoteBranch = null;
+        this.newUpstream = false;
+        this.needRepair = false;
+        this.stgMissing = false;
+        this.branchInitialized = true;
+        this.highlightPaths = null;
+        this.notifyDirty();
+        this.reload();
     }
-    async fetchHistory(historySize: number) {
-        let sha = await run('stg', ['id', '--', '{base}']);
-        if (sha === '')
-            sha = await run('git', ['rev-parse', 'HEAD']);
-        if (sha !== this.baseSha || this.historySize !== historySize) {
-            this.baseSha = sha;
-            this.historySize = historySize;
-            this.history = await History.fromRev(
-                this.baseSha, this.historySize);
-            this.notifyDirty();
-        }
+
+    reload() {
+        void this.displayLoads.loadSeries(
+            reader => this.readSeries(reader), state => {
+                this.branchName = state.branch || null;
+                if (!this.newUpstream) {
+                    const slash = state.upstream.indexOf('/');
+                    this.remoteName = state.upstream.slice(0, slash) ||
+                        this.remoteName;
+                    this.remoteBranch = state.upstream.slice(slash + 1) || null;
+                }
+                this.branchInitialized = state.series.ecode === 0;
+                this.stgMissing = state.series.ecode < 0;
+                if (this.stgMissing)
+                    this.warnAboutMissingStGit();
+                this.popped = state.patches.filter(p => p.kind === '-');
+                this.applied = state.patches.filter(p => p.kind !== '-');
+                this.baseSha = state.baseSha;
+                this.history = state.history;
+                this.loadedHistorySize = state.historySize;
+                this.needRepair = state.needRepair;
+                this.notifyDirty();
+            });
+        this.reloadIndexAndWorkTree();
     }
-    async checkForRepair() {
-        const top = await run('stg', ['top']);
-        const topArgs = top.length ? [top] : [];
-        const stgHeadPromise = run('stg', ['id', '--', ...topArgs]);
-        const gitHeadPromise = run('git', ['rev-parse', 'HEAD']);
-        const stgHead = await stgHeadPromise;
-        const gitHead = await gitHeadPromise;
-        const needRepair = (stgHead !== gitHead) && stgHead !== '';
-        if (this.needRepair !== needRepair) {
-            this.needRepair = needRepair;
-            this.notifyDirty();
+
+    private async readSeries(reader: RepoReader) {
+        const old = new Map(this.patches.map(p => [p.label, p]));
+        const [branch, upstream, series, base, top, gitHead] =
+            await Promise.all([
+                reader.run('git', ['symbolic-ref', '--short', 'HEAD']),
+                reader.run('git', [
+                    'rev-parse', '--abbrev-ref', '--symbolic-full-name',
+                    '@{upstream}'], { inhibitLogging: true }),
+                reader.runCommand('stg', [
+                    'series', '-ae', '--commit-id=40', '--description']),
+                reader.run('stg', ['id', '--', '{base}']),
+                reader.run('stg', ['top']),
+                reader.run('git', ['rev-parse', 'HEAD']),
+            ]);
+        const lines = series.ecode === 0 ?
+            series.stdout.split('\n').filter(line => line) : [];
+        const messagesBySha = new Map<string, string>();
+        if (lines.length) {
+            const output = await reader.run('git', [
+                'show', '-s', '--format=%H%x00%B%x00',
+                ...lines.map(line => line.slice(3, 43)),
+            ]);
+            const fields = output.split('\0');
+            for (let i = 0; i + 1 < fields.length; i += 2)
+                messagesBySha.set(fields[i].trim(), fields[i + 1]);
         }
+        const patches = lines.map(line => {
+            const sha = line.slice(3, 43);
+            return StGitPatch.fromSeries(
+                line, messagesBySha.get(sha) ?? '', reader);
+        });
+        await Promise.all(patches.map(async patch => {
+            const previous = old.get(patch.label);
+            if (previous)
+                await patch.updateFromOld(previous);
+            if (this.highlightPaths)
+                await patch.fetchDetails();
+        }));
+        const baseSha = base || gitHead;
+        const historySize = this.historySize;
+        const [history, stgHead] = await Promise.all([
+            baseSha === this.baseSha && historySize === this.loadedHistorySize ?
+                Promise.resolve(this.history) :
+                History.fromRev(reader, baseSha, historySize),
+            reader.run('stg', ['id', '--', ...(top ? [top] : [])]),
+        ]);
+        return {
+            branch, upstream, series, patches, baseSha, history, historySize,
+            needRepair: stgHead !== gitHead && stgHead !== '',
+        };
+    }
+
+    reloadIndexAndWorkTree() {
+        void this.displayLoads.loadChanges(async reader => {
+            const index = new Index(reader);
+            const workTree = new WorkTree(reader, this.unknownFilesVisible);
+            await Promise.all([
+                index.updateFromOld(this.index)
+                    .then(() => index.fetchDetails()),
+                workTree.updateFromOld(this.workTree)
+                    .then(() => workTree.fetchDetails()),
+            ]);
+            return { index, workTree };
+        }, state => {
+            this.index = state.index;
+            this.workTree = state.workTree;
+            this.notifyDirty();
+        });
+    }
+
+    reloadWorkTree() {
+        this.reloadIndexAndWorkTree();
     }
     warnAboutMissingStGit() {
         if (!this.warnedAboutMissingStgBinary) {
@@ -644,6 +828,13 @@ class StGitDoc {
         const msg = await run('git', ['show', '-s', sha, '--format=%B']);
         this.openCommentEditor(p.lineNum, msg, "stgit-edit");
     }
+    async copyCommitSha() {
+        const sha = await this.curPatch?.getSha();
+        if (!sha)
+            return;
+        await vscode.env.clipboard.writeText(sha);
+        showStatusMessage(`Copied commit SHA ${sha}`);
+    }
     async commentCreatePatch() {
         if (this.commentThread) {
             const msg = this.commentThread.comments[0].body;
@@ -754,7 +945,8 @@ class StGitDoc {
                 preview: true,
             };
             if (this.workTree.deltas.includes(delta)) {
-                dstUri = this.repo.getPathUri(delta.path);
+                dstUri = this.repo.getPathUri(
+                    delta.destPath ?? delta.path);
             }
             vscode.commands.executeCommand("vscode.diff",
                 srcUri, dstUri, `Diff ${delta.path}`, opts);
@@ -787,7 +979,8 @@ class StGitDoc {
         if (patch && sha) {
             const s = `${sha.slice(0, 5)}`;
             if (delta)
-                spec = `diff-${s}-${delta.path}#sha=${sha},file=${delta.path}`;
+                spec = `diff-${s}-${delta.path}#sha=${sha},file=${delta.path}` +
+                    (delta.destPath ? `,dest=${delta.destPath}` : '');
             else
                 spec = `diff-${s}#sha=${sha}`;
             invariant = true;   // Diff contents never changes
@@ -796,7 +989,8 @@ class StGitDoc {
                 const m = await this.selectMergeDiffMode(delta);
                 if (m === null)
                     return;
-                spec = `diff-index-${delta.path}#index,file=${delta.path}${m}`;
+                spec = `diff-index-${delta.path}#index,file=${delta.path}` +
+                    (delta.destPath ? `,dest=${delta.destPath}` : '') + m;
             } else {
                 spec = `diff-index#index`;
             }
@@ -842,7 +1036,10 @@ class StGitDoc {
         this.reload();
     }
     async switchBranch() {
-        if (this.index.deltas.length || this.workTree.deltas.length) {
+        const indexDeltas = this.index.deltas.filter(d => !d.isSubmodule);
+        const workTreeDeltas = this.workTree.deltas.filter(
+            d => !d.isSubmodule);
+        if (indexDeltas.length || workTreeDeltas.length) {
             info("Work tree and index must be clean to switch branch");
             return;
         }
@@ -999,6 +1196,11 @@ class StGitDoc {
         const patch = this.curPatch;
         const delta = this.curChange;
         if (delta) {
+            // Check if the delta is a submodule - if so, navigate into it
+            if (delta.isSubmodule) {
+                await this.navigateToSubmodule(delta.path);
+                return;
+            }
             const uri = this.repo.getPathUri(delta.path);
             if (!uri)
                 return;
@@ -1019,6 +1221,32 @@ class StGitDoc {
                     this.initializeBranch();
             }
         }
+    }
+    async navigateToSubmodule(submodulePath: string) {
+        // Construct the full path to the submodule
+        const fullPath = this.repo.getPathUri(submodulePath).fsPath;
+
+        // Create a new RepositoryInfo for the submodule
+        const submoduleRepo = await RepositoryInfo.createForPath(fullPath);
+        if (!submoduleRepo) {
+            info(`Failed to open submodule at ${submodulePath}`);
+            return;
+        }
+
+        const context = await RepositoryInfo.buildParentStack(submoduleRepo);
+        this.switchRepository(submoduleRepo, context);
+        this.moveCursorToIndex();
+    }
+    async navigateToParent() {
+        if (this.parentRepoStack.length === 0) {
+            info("Already at root repository");
+            return;
+        }
+
+        const parent = this.parentRepoStack.at(-1)!;
+        const context = await RepositoryInfo.buildParentStack(parent.repo);
+        this.switchRepository(parent.repo, context);
+        await this.moveCursorToDelta(parent.submodulePath);
     }
     async resolveConflict() {
         const change = this.curChange;
@@ -1044,20 +1272,23 @@ class StGitDoc {
                 if (change.deleted)
                     await run('git', ['rm', '--', change.path]);
                 else
-                    await run('git', ['add', '--', change.path]);
+                    await run('git', ['add', '--', change.path,
+                        ...(change.destPath ? [change.destPath] : [])]);
             } else {
                 await run('git', ['add', '-u']);
             }
             this.reloadIndexAndWorkTree();
         } else if (patch?.kind == 'I') {
             if (change)
-                await run('git', ['restore', '-S', '--', change.path]);
+                await run('git', ['restore', '-S', '--', change.path,
+                    ...(change.destPath ? [change.destPath] : [])]);
             else
                 await run('git', ["reset", "HEAD"]);
             this.reloadIndexAndWorkTree();
         } else if (patch && patch === this.applied.at(-1)) {
             if (change)
-                await uncommitFiles([change.path]);
+                await uncommitFiles([change.path,
+                    ...(change.destPath ? [change.destPath] : [])]);
             else
                 await uncommitFiles();
             this.reload();
@@ -1120,8 +1351,8 @@ class StGitDoc {
             placeHolder: "Specify Git history size",
         });
         if (numStr) {
-            const historySize = parseInt(numStr);
-            this.fetchHistory(historySize);
+            this.historySize = parseInt(numStr);
+            this.reload();
         }
     }
     async commitOrUncommitPatches() {
@@ -1135,8 +1366,7 @@ class StGitDoc {
         } else {
             return;
         }
-        this.reloadPatches();
-        this.fetchHistory(this.historySize);
+        this.reload();
     }
     toggleShowingUnknownFiles() {
         this.unknownFilesVisible = !this.unknownFilesVisible;
@@ -1168,22 +1398,71 @@ class StGitDoc {
         this.moveCursorToIndexAtOpen(editor);
     }
 
-    private async moveCursorToIndexAtOpen(editor: vscode.TextEditor) {
-        let done = false;
+    private async moveCursorToIndex() {
+        const editor = this.editor;
+        if (!editor)
+            return;
+        this.moveCursorToIndexAtOpen(editor);
+    }
+
+    private async moveCursorToDelta(path: string) {
+        const editor = this.editor;
+        if (!editor)
+            return;
+        // The work tree deltas may load after several document
+        // updates, so keep trying on each update until found.
+        let resolve: () => void;
+        const found = new Promise<void>(r => { resolve = r; });
         const watcher = workspace.onDidChangeTextDocument((e) => {
-            if (e.document !== this.doc || done)
+            if (e.document !== this.doc)
                 return;
-            const line = this.index.lineNum;
-            if (line !== 0) {
-                const p = new vscode.Position(line, 0);
-                editor.selection = new vscode.Selection(p, p);
-                editor.revealRange(new vscode.Range(p, p));
-                done = true;
+            for (const p of this.patches) {
+                const idx = p.deltas.findIndex(
+                    d => d.path === path);
+                if (idx < 0) {
+                    continue;
+                }
+                const line = p.lineNum + idx + 1;
+                const pos = new vscode.Position(line, 0);
+                editor.selection =
+                    new vscode.Selection(pos, pos);
+                editor.revealRange(
+                    new vscode.Range(pos, pos));
+                resolve();
                 return;
             }
         });
-        await sleep(4000);
+        const winner = await Promise.race([
+            found.then(() => 'found' as const),
+            sleep(4000).then(() => 'timeout' as const),
+        ]);
         watcher.dispose();
+        if (winner === 'timeout')
+            this.moveCursorToIndex();
+    }
+
+    private async moveCursorToIndexAtOpen(editor: vscode.TextEditor) {
+        let resolve: () => void;
+        const found = new Promise<void>(r => { resolve = r; });
+        const watcher = workspace.onDidChangeTextDocument((e) => {
+            if (e.document !== this.doc)
+                return;
+            const line = this.index.lineNum;
+            if (line === 0) {
+                return;
+            }
+            const p = new vscode.Position(line, 0);
+            editor.selection = new vscode.Selection(p, p);
+            editor.revealRange(new vscode.Range(p, p));
+            resolve();
+        });
+        const winner = await Promise.race([
+            found.then(() => 'found' as const),
+            sleep(4000).then(() => 'timeout' as const),
+        ]);
+        watcher.dispose();
+        if (winner === 'timeout')
+            this.moveCursorToIndex();
     }
 
     private updateDecorations() {
@@ -1192,6 +1471,26 @@ class StGitDoc {
                 p => new vscode.Range(p.lineNum, 2, p.lineNum, 2));
         this.historyRanges = this.history.map(
             p => new vscode.Range(p.lineNum, 0, p.lineNum, 999));
+        // Submodule line is line 0 when inside a submodule
+        this.submoduleRanges = this.relativePathFromRoot
+            ? [new vscode.Range(0, 0, 0, 999)]
+            : [];
+        // Also highlight [submodule] suffix on delta lines
+        for (const p of this.patches) {
+            if (p.lineCount <= 1)
+                continue;
+            for (let i = 0; i < p.deltas.length; i++) {
+                const d = p.deltas[i];
+                if (!d.isSubmodule)
+                    continue;
+                const line = p.lineNum + i + 1;
+                const col = d.docLine.indexOf('[submodule]');
+                if (col >= 0) {
+                    this.submoduleRanges.push(new vscode.Range(
+                        line, col, line, col + '[submodule]'.length));
+                }
+            }
+        }
         this.updateEditorDecorations();
     }
 
@@ -1205,6 +1504,8 @@ class StGitDoc {
                 cls.fileHighlightDecoration, this.highlightRanges);
             editor.setDecorations(
                 cls.historyDecoration, this.historyRanges);
+            editor.setDecorations(
+                cls.submoduleDecoration, this.submoduleRanges);
         }
     }
 
@@ -1251,7 +1552,12 @@ class StGitDoc {
 
     get documentContents(): string {
         const b = this.branchName ?? this.baseSha?.slice(0, 16) ?? "<unknown>";
-        const lines = [`Branch: ${b}${this.upstreamString}`, ""];
+        const branchLine = `Branch: ${b}${this.upstreamString}`;
+        const lines: string[] = [];
+        if (this.relativePathFromRoot) {
+            lines.push(`Submodule: ${this.relativePathFromRoot}`);
+        }
+        lines.push(branchLine, "");
         function pushVec(patches: Patch[]) {
             for (const p of patches) {
                 const patchLines = p.getLines();
@@ -1282,10 +1588,23 @@ class StGitMode {
     static instance: StGitMode | null;
 
     private changeEmitter = new vscode.EventEmitter<vscode.Uri>();
+    private pendingSelections = new Map<vscode.TextEditor, {
+        previous: string;
+        next: string;
+        selections: readonly vscode.Selection[];
+    }>();
     private commentController = vscode.comments.createCommentController(
         'stgit.comments', "StGit");
 
     stgit: StGitDoc | null = null;
+    private repositoryFollower = new RepositoryFollower({
+        lookup: (directory: string) => RepositoryInfo.createForPath(directory),
+        current: () => this.stgit?.repo ?? null,
+        loadContext: repo => RepositoryInfo.buildParentStack(repo),
+        switchTo: (repo, context) => {
+            this.stgit?.switchRepository(repo, context);
+        },
+    });
 
     readonly fileHighlightDecoration = window.createTextEditorDecorationType({
         before: { contentText: "⏹ ", },
@@ -1294,11 +1613,29 @@ class StGitMode {
         dark: { color: "#777", },
         light: { color: "#999", },
     });
+    readonly submoduleDecoration = window.createTextEditorDecorationType({
+        dark: { color: "#4EC9B0", },  // Teal/cyan color
+        light: { color: "#16825D", }, // Darker green for light themes
+        fontStyle: "italic",
+    });
     constructor(context: vscode.ExtensionContext) {
         const provider: vscode.TextDocumentContentProvider = {
             onDidChange: this.changeEmitter.event,
             provideTextDocumentContent: (uri: vscode.Uri, token) => {
-                return this.stgit?.documentContents ?? "\nIndex\n";
+                const next = this.stgit?.documentContents ?? "\nIndex\n";
+                const doc = this.stgit?.doc;
+                if (doc && next !== doc.getText()) {
+                    this.pendingSelections.clear();
+                    for (const editor of window.visibleTextEditors) {
+                        if (editor.document === doc) {
+                            this.pendingSelections.set(editor, {
+                                previous: doc.getText(), next,
+                                selections: editor.selections,
+                            });
+                        }
+                    }
+                }
+                return next;
             }
         };
         function cmd(cmd: string, func: () => void) {
@@ -1309,6 +1646,38 @@ class StGitMode {
         }
         context.subscriptions.push(
             this,       /* self dispose */
+
+            window.onDidChangeTextEditorSelection(event => {
+                if (event.kind !== undefined) {
+                    const pending = this.pendingSelections.get(
+                        event.textEditor);
+                    if (pending)
+                        pending.selections = event.selections;
+                }
+            }),
+            workspace.onDidChangeTextDocument(event => {
+                if (event.document !== this.stgit?.doc)
+                    return;
+                for (const [editor, pending] of this.pendingSelections) {
+                    if (event.document.getText() !== pending.next)
+                        continue;
+                    editor.selections = pending.selections.map(selection => {
+                        const position = (point: vscode.Position) => {
+                            const line = correspondingLine(
+                                pending.previous, pending.next, point.line);
+                            const column = Math.min(point.character,
+                                event.document.lineAt(line).text.length);
+                            return new vscode.Position(line, column);
+                        };
+                        return new vscode.Selection(
+                            position(selection.anchor),
+                            position(selection.active));
+                    });
+                    editor.revealRange(editor.selection,
+                        vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+                    this.pendingSelections.delete(editor);
+                }
+            }),
 
             globalCmd('open', () => this.openStgit()),
             cmd('refresh', () => this.stgit?.refresh()),
@@ -1342,6 +1711,7 @@ class StGitMode {
             cmd('completePatchEdit', () => this.stgit?.completePatchEdit()),
             cmd('cancel', () => this.stgit?.cancel()),
             cmd('editCommitMessage', () => this.stgit?.editCommitMessage()),
+            cmd('copyCommitSha', () => this.stgit?.copyCommitSha()),
             cmd('squashPatches', () => this.stgit?.squashPatches()),
             cmd('deletePatches', () => this.stgit?.deletePatches()),
             cmd('highlightFile', () => this.stgit?.highlightFile()),
@@ -1357,11 +1727,18 @@ class StGitMode {
             cmd('hardUndo', () => this.stgit?.hardUndo()),
             cmd('redo', () => this.stgit?.redo()),
             cmd('help', () => this.stgit?.help()),
+            cmd('navigateToParent', () => this.stgit?.navigateToParent()),
 
             workspace.registerTextDocumentContentProvider('stgit', provider),
+            vscode.languages.registerFoldingRangeProvider(
+                { scheme: 'stgit', language: 'stgit.buffer' }, {
+                    provideFoldingRanges: () => [],
+                }),
 
             workspace.onDidCloseTextDocument((doc) => {
                 if (doc === this.stgit?.doc) {
+                    this.pendingSelections.clear();
+                    this.repositoryFollower.cancel();
                     this.stgit.dispose();
                     this.stgit = null;
                 }
@@ -1369,9 +1746,16 @@ class StGitMode {
             workspace.onDidSaveTextDocument((doc) => {
                 this.stgit?.reloadWorkTree();
             }),
+            window.onDidChangeActiveTextEditor(editor => {
+                if (editor?.document.uri.scheme === 'file' && this.stgit)
+                    void this.repositoryFollower.followFile(
+                        editor.document.uri.fsPath);
+            }),
         );
     }
     dispose() {
+        this.pendingSelections.clear();
+        this.repositoryFollower.cancel();
         this.stgit?.dispose();
         this.stgit = null;
         this.commentController.dispose();
@@ -1380,6 +1764,7 @@ class StGitMode {
 
         this.fileHighlightDecoration.dispose();
         this.historyDecoration.dispose();
+        this.submoduleDecoration.dispose();
     }
     private async openStgit() {
         if (this.stgit) {
@@ -1391,7 +1776,8 @@ class StGitMode {
                     info("Failed to find a GIT repository");
                     return;
                 }
-                this.stgit.repo = repo;
+                const context = await RepositoryInfo.buildParentStack(repo);
+                this.stgit.switchRepository(repo, context);
             }
             this.stgit.focusWindow();
             this.stgit.reload();
@@ -1401,9 +1787,14 @@ class StGitMode {
                 info("Failed to find a GIT repository");
                 return;
             }
-            const doc = await workspace.openTextDocument(this.uri);
+            RepositoryInfo.setSelectedRepo(repo);
+            const doc = await vscode.languages.setTextDocumentLanguage(
+                await workspace.openTextDocument(this.uri), 'stgit.buffer');
             this.stgit = new StGitDoc(doc, repo,
-                () => this.changeEmitter.fire(doc.uri),
+                () => {
+                    if (this.stgit?.documentContents !== doc.getText())
+                        this.changeEmitter.fire(doc.uri);
+                },
                 this.commentController);
         }
     }
