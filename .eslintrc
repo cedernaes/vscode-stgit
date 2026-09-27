@@ -13,7 +13,7 @@
   "rules": {
     "no-trailing-spaces": ["error"],
     "keyword-spacing": ["error", { "before": true, "after": true }],
-    "max-len": ["error", { "code": 80 }],
+    "max-len": ["error", { "code": 180 }],
     "semi": "off",
     "indent": ["error", 4, {
       "CallExpression": { "arguments": "off" },
