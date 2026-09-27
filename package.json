@@ -530,6 +530,8 @@
         "pretest": "npm run compile && npm run lint",
         "lint": "eslint src --ext ts",
         "test": "node ./out/test/runTest.js",
+        "test:unit": "npm run compile && mocha --ui tdd \"out/test/unit/**/*.test.js\"",
+        "release": "npm run compile && node ./out/release.js",
         "package": "vsce package",
         "publish": "vsce publish"
     },

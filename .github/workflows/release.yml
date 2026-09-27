@@ -1,0 +1,129 @@
+name: Release
+
+# Cuts a release on demand: bumps the version, closes the "[Unreleased]"
+# changelog section, tags the release commit and publishes a GitHub release
+# with the changelog entries, GitHub's auto-generated notes and the .vsix.
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: Which version component to bump
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
+        required: true
+      dry_run:
+        description: Build everything, but do not push or publish
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The whole history, so that the tag and the generated release
+          # notes see the previous releases.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run compile
+
+      - run: npm run lint
+
+      - name: Run the unit tests
+        run: npm run test:unit
+
+      - name: Bump the version and close the changelog section
+        id: release
+        env:
+          RELEASE_TYPE: ${{ inputs.release_type }}
+        run: |
+          set -euo pipefail
+          version="$(node ./out/release.js "$RELEASE_TYPE")"
+          node ./out/release.js notes "$version" \
+              > "$RUNNER_TEMP/changelog-notes.md"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "vsix=stgit-$version.vsix" >> "$GITHUB_OUTPUT"
+          git --no-pager diff --stat
+
+      - name: Package the extension
+        run: npx vsce package --out "${{ steps.release.outputs.vsix }}"
+
+      - name: Commit and tag the release
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email \
+              '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package.json package-lock.json CHANGELOG.md
+          git commit -m "Release $TAG"
+          git tag -a "$TAG" -m "Release $TAG"
+
+      - name: Push the release commit and the tag
+        if: ${{ !inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          git push origin "HEAD:refs/heads/$GITHUB_REF_NAME"
+          git push origin "refs/tags/${{ steps.release.outputs.tag }}"
+
+      - name: Assemble the release body
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          # GitHub's own "What's Changed" section, i.e. what a release
+          # gets when its notes are left auto-generated.
+          gh api --method POST \
+              "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+              -f tag_name="$TAG" \
+              -f target_commitish="$GITHUB_REF_NAME" \
+              --jq .body > "$RUNNER_TEMP/generated-notes.md"
+          {
+              cat "$RUNNER_TEMP/changelog-notes.md"
+              echo
+              cat "$RUNNER_TEMP/generated-notes.md"
+          } > "$RUNNER_TEMP/release-body.md"
+          cat "$RUNNER_TEMP/release-body.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create the GitHub release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          VSIX: ${{ steps.release.outputs.vsix }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" \
+              --title "$TAG" \
+              --notes-file "$RUNNER_TEMP/release-body.md" \
+              "$VSIX"
+
+      - name: Upload the build artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: stgit-${{ steps.release.outputs.version }}
+          path: |
+            ${{ steps.release.outputs.vsix }}
+            ${{ runner.temp }}/release-body.md
