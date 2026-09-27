@@ -1,0 +1,52 @@
+name: CI
+
+on:
+    pull_request:
+    push:
+        branches:
+            - main
+
+permissions:
+    contents: read
+
+jobs:
+    test:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+              with:
+                  node-version: 24
+                  cache: npm
+
+            - run: npm ci
+
+            - run: npm run compile
+
+            - run: npm run lint
+
+            - name: Run the unit tests
+              run: npm test:unit
+
+            - name: Run the integration tests
+              # VS Code needs a display, even when only running tests.
+              run: xvfb-run -a node ./out/test/runTest.js
+
+    package:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+              with:
+                  node-version: 24
+                  cache: npm
+
+            - run: npm ci
+
+            - name: Package the extension
+              run: npx vsce package --out stgit.vsix
+
+            - name: List the packaged files
+              run: unzip -l stgit.vsix
