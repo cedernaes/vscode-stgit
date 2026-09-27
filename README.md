@@ -26,8 +26,8 @@ While the StGit window is open, it follows the repository of the active file, in
 ![StGit](images/example.png)
 
 > Hint: To enter StGit, press `Ctrl-C Ctrl-I` or run the "`StGit: Open...`"
-command. In the `StGit` window, press `h` to list all available StGit
-operations.
+> command. In the `StGit` window, press `h` to list all available StGit
+> operations.
 
 ## Requirements
 
@@ -35,7 +35,7 @@ This extension requires StGit to be installed (the executable is called `stg`). 
 
 ## Git History Format
 
-Git history entries use the effective `format.pretty` Git configuration. Custom `format:` and `tformat:` values and named `pretty.<name>` aliases are supported.  Multiline output is flattened to one line, and terminal colors are omitted. If no reusable one-line format is configured, the extension uses `%h   %s`.
+Git history entries use the effective `format.pretty` Git configuration. Custom `format:` and `tformat:` values and named `pretty.<name>` aliases are supported. Multiline output is flattened to one line, and terminal colors are omitted. If no reusable one-line format is configured, the extension uses `%h   %s`.
 
 <!--
 ## Extension Settings

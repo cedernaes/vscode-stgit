@@ -28,7 +28,7 @@
     "icon": "images/icon.png",
     "contributes": {
         "configurationDefaults": {
-            "[stgit.buffer]": {
+            "[stgit-buffer]": {
                 "editor.folding": false
             }
         },
@@ -55,481 +55,609 @@
             }
         },
         "menus": {
-            "comments/comment/context": [{
-                "command": "stgit.commentCreatePatch",
-                "when": "comment == stgit"
-            }, {
-                "command": "stgit.completePatchEdit",
-                "when": "comment == stgit-edit"
-            }],
-            "commandPalette": [{
-                "command": "stgit.commentCreatePatch",
-                "when": "false"
-            }, {
-                "command": "stgit.completePatchEdit",
-                "when": "false"
-            }]
+            "comments/comment/context": [
+                {
+                    "command": "stgit.commentCreatePatch",
+                    "when": "comment == stgit"
+                },
+                {
+                    "command": "stgit.completePatchEdit",
+                    "when": "comment == stgit-edit"
+                }
+            ],
+            "commandPalette": [
+                {
+                    "command": "stgit.commentCreatePatch",
+                    "when": "false"
+                },
+                {
+                    "command": "stgit.completePatchEdit",
+                    "when": "false"
+                }
+            ]
         },
-        "languages": [{
-            "id": "stgit.buffer",
-            "filenames": [ "StGit" ]
-        }],
-        "grammars": [{
-            "language": "stgit.buffer",
-            "scopeName": "source.stgit",
-            "path": "./syntaxes/stgit.tmLanguage.json"
-        }],
-        "commands": [{
-            "command": "stgit.commentCreatePatch",
-            "category": "StGit",
-            "title": "Commit"
-        }, {
-            "command": "stgit.completePatchEdit",
-            "category": "StGit",
-            "title": "Update"
-        }, {
-            "command": "stgit.open",
-            "category": "StGit",
-            "title": "Open and Focus the StGit Patch Editor"
-        }, {
-            "command": "stgit.cancel",
-            "category": "StGit",
-            "title": "Cancel Ongoing StGit Operations (e.g. commit)"
-        }, {
-            "command": "stgit.editCommitMessage",
-            "category": "StGit",
-            "title": "Edit Commit Message"
-        }, {
-            "command": "stgit.copyCommitSha",
-            "category": "StGit",
-            "title": "Copy Full Commit SHA"
-        }, {
-            "command": "stgit.squashPatches",
-            "category": "StGit",
-            "title": "Squash Selected Patches"
-        }, {
-            "command": "stgit.deletePatches",
-            "category": "StGit",
-            "title": "Delete Patches"
-        }, {
-            "command": "stgit.openDiffEditor",
-            "category": "StGit",
-            "title": "Open VSCode Diff Editor"
-        }, {
-            "command": "stgit.showDiff",
-            "category": "StGit",
-            "title": "Show Diff"
-        }, {
-            "command": "stgit.openDiff",
-            "category": "StGit",
-            "title": "Show Diff and Switch Focus"
-        }, {
-            "command": "stgit.markPatch",
-            "category": "StGit",
-            "title": "Mark Patch at Point"
-        }, {
-            "command": "stgit.unmarkPatch",
-            "category": "StGit",
-            "title": "Unmark patch at Point"
-        }, {
-            "command": "stgit.help",
-            "category": "StGit",
-            "title": "Show All StGit Commands"
-        }, {
-            "command": "stgit.toggleExpand",
-            "category": "StGit",
-            "title": "Toggle Expand"
-        }, {
-            "command": "stgit.toggleShowingUnknown",
-            "category": "StGit",
-            "title": "Toggle Showing Unknown Files"
-        }, {
-            "command": "stgit.repair",
-            "category": "StGit",
-            "title": "Repair (accomodate changes made with plain Git)",
-            "shortTitle": "Repair"
-        }, {
-            "command": "stgit.reload",
-            "category": "StGit",
-            "title": "Refresh State"
-        }, {
-            "command": "stgit.resolveConflict",
-            "category": "StGit",
-            "title": "Mark Merge Conflict as Resolved"
-        }, {
-            "command": "stgit.createBranch",
-            "category": "StGit",
-            "title": "Create Branch"
-        }, {
-            "command": "stgit.switchBranch",
-            "category": "StGit",
-            "title": "Switch Branch"
-        }, {
-            "command": "stgit.rebase",
-            "category": "StGit",
-            "title": "Rebase Patch Series"
-        }, {
-            "command": "stgit.gitPush",
-            "category": "StGit",
-            "title": "Push Changes"
-        }, {
-            "command": "stgit.gitForcePush",
-            "category": "StGit",
-            "title": "Push Changes (force)"
-        }, {
-            "command": "stgit.gitFetch",
-            "category": "StGit",
-            "title": "Fetch Changes From Remote"
-        }, {
-            "command": "stgit.selectRemote",
-            "category": "StGit",
-            "title": "Select Remote"
-        }, {
-            "command": "stgit.selectUpstreamBranch",
-            "category": "StGit",
-            "title": "Select Upstream Branch"
-        }, {
-            "command": "stgit.highlightFile",
-            "category": "StGit",
-            "title": "Highlight Patches Modifying File"
-        }, {
-            "command": "stgit.cancelHighlighting",
-            "category": "StGit",
-            "title": "Cancel Patch Highlighting"
-        }, {
-            "command": "stgit.gotoPatch",
-            "category": "StGit",
-            "title": "Goto Patch"
-        }, {
-            "command": "stgit.pushOrPopPatches",
-            "category": "StGit",
-            "title": "Push or Pop Patches"
-        }, {
-            "command": "stgit.pushNextPatch",
-            "category": "StGit",
-            "title": "Push Next Patch onto Stack"
-        }, {
-            "command": "stgit.popCurrentPatch",
-            "category": "StGit",
-            "title": "Pop Current Patch from Stack"
-        }, {
-            "command": "stgit.setHistorySize",
-            "category": "StGit",
-            "title": "Set History Size"
-        }, {
-            "command": "stgit.movePatchesTo",
-            "category": "StGit",
-            "title": "Move Selected Patches"
-        }, {
-            "command": "stgit.newPatch",
-            "category": "StGit",
-            "title": "Create New Empty Patch"
-        }, {
-            "command": "stgit.createPatch",
-            "category": "StGit",
-            "title": "Create New Patch"
-        }, {
-            "command": "stgit.commitOrUncommitPatches",
-            "category": "StGit",
-            "title": "Convert Patches to GIT Commits (or vice versa)"
-        }, {
-            "command": "stgit.toggleChanges",
-            "category": "StGit",
-            "title": "Move Changes Between Index and Work Tree"
-        }, {
-            "command": "stgit.revertChanges",
-            "category": "StGit",
-            "title": "Revert Changes in Index or Work Tree"
-        }, {
-            "command": "stgit.undo",
-            "category": "StGit",
-            "title": "Undo Operation"
-        }, {
-            "command": "stgit.hardUndo",
-            "category": "StGit",
-            "title": "Undo Operation (hard)"
-        }, {
-            "command": "stgit.redo",
-            "category": "StGit",
-            "title": "Redo Operation"
-        }, {
-            "command": "stgit.navigateToParent",
-            "category": "StGit",
-            "title": "Navigate to Parent Repository (from submodule)"
-        }, {
-            "command": "stgit.refresh",
-            "category": "StGit",
-            "title": "Append Changes to Current Patch"
-        }, {
-            "command": "stgit.refreshSpecific",
-            "category": "StGit",
-            "title": "Append Changes to Specified Patch"
-        }, {
-            "command": "sdiff.applyHunk",
-            "category": "SDiff",
-            "title": "Apply Diff"
-        }, {
-            "command": "sdiff.revertHunk",
-            "category": "SDiff",
-            "title": "Revert Diff"
-        }, {
-            "command": "sdiff.stageHunk",
-            "category": "SDiff",
-            "title": "Stage Hunk"
-        }, {
-            "command": "sdiff.unstageHunk",
-            "category": "SDiff",
-            "title": "Unstage Hunk"
-        }, {
-            "command": "sdiff.splitHunk",
-            "category": "SDiff",
-            "title": "Split Diff"
-        }, {
-            "command": "sdiff.openCurrentFileDiff",
-            "category": "SDiff",
-            "title": "Show Current File Changes as a Diff"
-        }, {
-            "command": "sdiff.help",
-            "category": "SDiff",
-            "title": "Help"
-        }, {
-            "command": "sdiff.gotoPreviousHunk",
-            "category": "SDiff",
-            "title": "Goto Previous Hunk"
-        }, {
-            "command": "sdiff.gotoNextHunk",
-            "category": "SDiff",
-            "title": "Goto Next Hunk"
-        }, {
-            "command": "sdiff.openFile",
-            "category": "SDiff",
-            "title": "Open File"
-        }],
-        "keybindings": [{
-            "key": "r",
-            "command": "stgit.refresh",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "ctrl-u r",
-            "command": "stgit.refreshSpecific",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "g",
-            "command": "stgit.reload",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-            }, {
-            "key": "ctrl-u g",
-            "command": "stgit.repair",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "shift+g",
-            "command": "stgit.gotoPatch",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "shift+p",
-            "command": "stgit.pushOrPopPatches",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "shift+.",
-            "command": "stgit.pushNextPatch",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "shift+,",
-            "command": "stgit.popCurrentPatch",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "shift+h",
-            "command": "stgit.setHistorySize",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "shift+m",
-            "command": "stgit.movePatchesTo",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "ctrl+c shift+b",
-            "command": "stgit.createBranch",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "shift+b",
-            "command": "stgit.switchBranch",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "f",
-            "command": "stgit.highlightFile",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "shift+f",
-            "command": "stgit.cancelHighlighting",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "u",
-            "command": "stgit.unmarkPatch",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "m",
-            "command": "stgit.markPatch",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "i",
-            "command": "stgit.toggleChanges",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "shift+u",
-            "command": "stgit.revertChanges",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "ctrl+c ctrl+b",
-            "command": "stgit.rebase",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "ctrl+c f",
-            "command": "stgit.gitFetch",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "ctrl+c p",
-            "command": "stgit.gitPush",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "ctrl+c r",
-            "command": "stgit.selectRemote",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "ctrl+c u",
-            "command": "stgit.selectUpstreamBranch",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "ctrl+u p",
-            "command": "stgit.gitForcePush",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "ctrl+shift+-",
-            "command": "stgit.undo",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "ctrl+u ctrl+shift+-",
-            "command": "stgit.hardUndo",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "ctrl+c ctrl+shift+-",
-            "command": "stgit.redo",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "shift+n",
-            "command": "stgit.newPatch",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "c",
-            "command": "stgit.createPatch",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "ctrl-c ctrl-c",
-            "command": "stgit.commitOrUncommitPatches",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "h",
-            "command": "stgit.help",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "enter",
-            "command": "stgit.toggleExpand",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "-",
-            "command": "stgit.navigateToParent",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "t",
-            "command": "stgit.toggleShowingUnknown",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "shift+R",
-            "command": "stgit.resolveConflict",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "e",
-            "command": "stgit.editCommitMessage",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "shift+s",
-            "command": "stgit.squashPatches",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "shift+d",
-            "command": "stgit.deletePatches",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "shift+=",
-            "command": "stgit.openDiffEditor",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "=",
-            "command": "stgit.showDiff",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "alt-=",
-            "command": "stgit.openDiff",
-            "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-        }, {
-            "key": "ctrl+c ctrl+i",
-            "command": "stgit.open",
-            "when": "!terminalFocus"
-        }, {
-            "key": "ctrl+c ctrl+c",
-            "command": "editor.action.submitComment",
-            "when": "resourceScheme == stgit && commentEditorFocused"
-        }, {
-            "key": "escape",
-            "command": "stgit.cancel",
-            "when": "resourceScheme == stgit"
-        }, {
-            "key": "h",
-            "command": "sdiff.help",
-            "when": "resourceScheme == stgit-diff && editorTextFocus"
-        }, {
-            "key": "p",
-            "command": "sdiff.gotoPreviousHunk",
-            "when": "resourceScheme == stgit-diff && editorTextFocus"
-        }, {
-            "key": "n",
-            "command": "sdiff.gotoNextHunk",
-            "when": "resourceScheme == stgit-diff && editorTextFocus"
-        }, {
-            "key": "ctrl-c ctrl-a",
-            "command": "sdiff.applyHunk",
-            "when": "resourceScheme == stgit-diff && editorTextFocus"
-        }, {
-            "key": "ctrl-c ctrl-u",
-            "command": "sdiff.revertHunk",
-            "when": "resourceScheme == stgit-diff && editorTextFocus"
-        }, {
-            "key": "s",
-            "command": "sdiff.stageHunk",
-            "when": "resourceScheme == stgit-diff && editorTextFocus"
-        }, {
-            "key": "u",
-            "command": "sdiff.unstageHunk",
-            "when": "resourceScheme == stgit-diff && editorTextFocus"
-        }, {
-            "key": "enter",
-            "command": "sdiff.openFile",
-            "when": "resourceScheme == stgit-diff && editorTextFocus"
-        }, {
-            "key": "ctrl-c ctrl-s",
-            "command": "sdiff.splitHunk",
-            "when": "resourceScheme == stgit-diff && editorTextFocus"
-        }, {
-            "key": "ctrl-x =",
-            "command": "sdiff.openCurrentFileDiff",
-            "when": "editorTextFocus && !editorReadonly && !inDiffEditor"
-        }]
+        "languages": [
+            {
+                "id": "stgit-buffer",
+                "filenames": [
+                    "StGit"
+                ]
+            }
+        ],
+        "grammars": [
+            {
+                "language": "stgit-buffer",
+                "scopeName": "source.stgit",
+                "path": "./syntaxes/stgit.tmLanguage.json"
+            }
+        ],
+        "commands": [
+            {
+                "command": "stgit.commentCreatePatch",
+                "category": "StGit",
+                "title": "Commit"
+            },
+            {
+                "command": "stgit.completePatchEdit",
+                "category": "StGit",
+                "title": "Update"
+            },
+            {
+                "command": "stgit.open",
+                "category": "StGit",
+                "title": "Open and Focus the StGit Patch Editor"
+            },
+            {
+                "command": "stgit.cancel",
+                "category": "StGit",
+                "title": "Cancel Ongoing StGit Operations (e.g. commit)"
+            },
+            {
+                "command": "stgit.editCommitMessage",
+                "category": "StGit",
+                "title": "Edit Commit Message"
+            },
+            {
+                "command": "stgit.copyCommitSha",
+                "category": "StGit",
+                "title": "Copy Full Commit SHA"
+            },
+            {
+                "command": "stgit.squashPatches",
+                "category": "StGit",
+                "title": "Squash Selected Patches"
+            },
+            {
+                "command": "stgit.deletePatches",
+                "category": "StGit",
+                "title": "Delete Patches"
+            },
+            {
+                "command": "stgit.openDiffEditor",
+                "category": "StGit",
+                "title": "Open VSCode Diff Editor"
+            },
+            {
+                "command": "stgit.showDiff",
+                "category": "StGit",
+                "title": "Show Diff"
+            },
+            {
+                "command": "stgit.openDiff",
+                "category": "StGit",
+                "title": "Show Diff and Switch Focus"
+            },
+            {
+                "command": "stgit.markPatch",
+                "category": "StGit",
+                "title": "Mark Patch at Point"
+            },
+            {
+                "command": "stgit.unmarkPatch",
+                "category": "StGit",
+                "title": "Unmark patch at Point"
+            },
+            {
+                "command": "stgit.help",
+                "category": "StGit",
+                "title": "Show All StGit Commands"
+            },
+            {
+                "command": "stgit.toggleExpand",
+                "category": "StGit",
+                "title": "Toggle Expand"
+            },
+            {
+                "command": "stgit.toggleShowingUnknown",
+                "category": "StGit",
+                "title": "Toggle Showing Unknown Files"
+            },
+            {
+                "command": "stgit.repair",
+                "category": "StGit",
+                "title": "Repair (accomodate changes made with plain Git)",
+                "shortTitle": "Repair"
+            },
+            {
+                "command": "stgit.reload",
+                "category": "StGit",
+                "title": "Refresh State"
+            },
+            {
+                "command": "stgit.resolveConflict",
+                "category": "StGit",
+                "title": "Mark Merge Conflict as Resolved"
+            },
+            {
+                "command": "stgit.createBranch",
+                "category": "StGit",
+                "title": "Create Branch"
+            },
+            {
+                "command": "stgit.switchBranch",
+                "category": "StGit",
+                "title": "Switch Branch"
+            },
+            {
+                "command": "stgit.rebase",
+                "category": "StGit",
+                "title": "Rebase Patch Series"
+            },
+            {
+                "command": "stgit.gitPush",
+                "category": "StGit",
+                "title": "Push Changes"
+            },
+            {
+                "command": "stgit.gitForcePush",
+                "category": "StGit",
+                "title": "Push Changes (force)"
+            },
+            {
+                "command": "stgit.gitFetch",
+                "category": "StGit",
+                "title": "Fetch Changes From Remote"
+            },
+            {
+                "command": "stgit.selectRemote",
+                "category": "StGit",
+                "title": "Select Remote"
+            },
+            {
+                "command": "stgit.selectUpstreamBranch",
+                "category": "StGit",
+                "title": "Select Upstream Branch"
+            },
+            {
+                "command": "stgit.highlightFile",
+                "category": "StGit",
+                "title": "Highlight Patches Modifying File"
+            },
+            {
+                "command": "stgit.cancelHighlighting",
+                "category": "StGit",
+                "title": "Cancel Patch Highlighting"
+            },
+            {
+                "command": "stgit.gotoPatch",
+                "category": "StGit",
+                "title": "Goto Patch"
+            },
+            {
+                "command": "stgit.pushOrPopPatches",
+                "category": "StGit",
+                "title": "Push or Pop Patches"
+            },
+            {
+                "command": "stgit.pushNextPatch",
+                "category": "StGit",
+                "title": "Push Next Patch onto Stack"
+            },
+            {
+                "command": "stgit.popCurrentPatch",
+                "category": "StGit",
+                "title": "Pop Current Patch from Stack"
+            },
+            {
+                "command": "stgit.setHistorySize",
+                "category": "StGit",
+                "title": "Set History Size"
+            },
+            {
+                "command": "stgit.movePatchesTo",
+                "category": "StGit",
+                "title": "Move Selected Patches"
+            },
+            {
+                "command": "stgit.newPatch",
+                "category": "StGit",
+                "title": "Create New Empty Patch"
+            },
+            {
+                "command": "stgit.createPatch",
+                "category": "StGit",
+                "title": "Create New Patch"
+            },
+            {
+                "command": "stgit.commitOrUncommitPatches",
+                "category": "StGit",
+                "title": "Convert Patches to GIT Commits (or vice versa)"
+            },
+            {
+                "command": "stgit.toggleChanges",
+                "category": "StGit",
+                "title": "Move Changes Between Index and Work Tree"
+            },
+            {
+                "command": "stgit.revertChanges",
+                "category": "StGit",
+                "title": "Revert Changes in Index or Work Tree"
+            },
+            {
+                "command": "stgit.undo",
+                "category": "StGit",
+                "title": "Undo Operation"
+            },
+            {
+                "command": "stgit.hardUndo",
+                "category": "StGit",
+                "title": "Undo Operation (hard)"
+            },
+            {
+                "command": "stgit.redo",
+                "category": "StGit",
+                "title": "Redo Operation"
+            },
+            {
+                "command": "stgit.navigateToParent",
+                "category": "StGit",
+                "title": "Navigate to Parent Repository (from submodule)"
+            },
+            {
+                "command": "stgit.refresh",
+                "category": "StGit",
+                "title": "Append Changes to Current Patch"
+            },
+            {
+                "command": "stgit.refreshSpecific",
+                "category": "StGit",
+                "title": "Append Changes to Specified Patch"
+            },
+            {
+                "command": "sdiff.applyHunk",
+                "category": "SDiff",
+                "title": "Apply Diff"
+            },
+            {
+                "command": "sdiff.revertHunk",
+                "category": "SDiff",
+                "title": "Revert Diff"
+            },
+            {
+                "command": "sdiff.stageHunk",
+                "category": "SDiff",
+                "title": "Stage Hunk"
+            },
+            {
+                "command": "sdiff.unstageHunk",
+                "category": "SDiff",
+                "title": "Unstage Hunk"
+            },
+            {
+                "command": "sdiff.splitHunk",
+                "category": "SDiff",
+                "title": "Split Diff"
+            },
+            {
+                "command": "sdiff.openCurrentFileDiff",
+                "category": "SDiff",
+                "title": "Show Current File Changes as a Diff"
+            },
+            {
+                "command": "sdiff.help",
+                "category": "SDiff",
+                "title": "Help"
+            },
+            {
+                "command": "sdiff.gotoPreviousHunk",
+                "category": "SDiff",
+                "title": "Goto Previous Hunk"
+            },
+            {
+                "command": "sdiff.gotoNextHunk",
+                "category": "SDiff",
+                "title": "Goto Next Hunk"
+            },
+            {
+                "command": "sdiff.openFile",
+                "category": "SDiff",
+                "title": "Open File"
+            }
+        ],
+        "keybindings": [
+            {
+                "key": "r",
+                "command": "stgit.refresh",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "ctrl-u r",
+                "command": "stgit.refreshSpecific",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "g",
+                "command": "stgit.reload",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "ctrl-u g",
+                "command": "stgit.repair",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "shift+g",
+                "command": "stgit.gotoPatch",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "shift+p",
+                "command": "stgit.pushOrPopPatches",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "shift+.",
+                "command": "stgit.pushNextPatch",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "shift+,",
+                "command": "stgit.popCurrentPatch",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "shift+h",
+                "command": "stgit.setHistorySize",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "shift+m",
+                "command": "stgit.movePatchesTo",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "ctrl+c shift+b",
+                "command": "stgit.createBranch",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "shift+b",
+                "command": "stgit.switchBranch",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "f",
+                "command": "stgit.highlightFile",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "shift+f",
+                "command": "stgit.cancelHighlighting",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "u",
+                "command": "stgit.unmarkPatch",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "m",
+                "command": "stgit.markPatch",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "i",
+                "command": "stgit.toggleChanges",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "shift+u",
+                "command": "stgit.revertChanges",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "ctrl+c ctrl+b",
+                "command": "stgit.rebase",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "ctrl+c f",
+                "command": "stgit.gitFetch",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "ctrl+c p",
+                "command": "stgit.gitPush",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "ctrl+c r",
+                "command": "stgit.selectRemote",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "ctrl+c u",
+                "command": "stgit.selectUpstreamBranch",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "ctrl+u p",
+                "command": "stgit.gitForcePush",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "ctrl+shift+-",
+                "command": "stgit.undo",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "ctrl+u ctrl+shift+-",
+                "command": "stgit.hardUndo",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "ctrl+c ctrl+shift+-",
+                "command": "stgit.redo",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "shift+n",
+                "command": "stgit.newPatch",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "c",
+                "command": "stgit.createPatch",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "ctrl-c ctrl-c",
+                "command": "stgit.commitOrUncommitPatches",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "h",
+                "command": "stgit.help",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "enter",
+                "command": "stgit.toggleExpand",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "-",
+                "command": "stgit.navigateToParent",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "t",
+                "command": "stgit.toggleShowingUnknown",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "shift+R",
+                "command": "stgit.resolveConflict",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "e",
+                "command": "stgit.editCommitMessage",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "shift+s",
+                "command": "stgit.squashPatches",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "shift+d",
+                "command": "stgit.deletePatches",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "shift+=",
+                "command": "stgit.openDiffEditor",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "=",
+                "command": "stgit.showDiff",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "alt-=",
+                "command": "stgit.openDiff",
+                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+            },
+            {
+                "key": "ctrl+c ctrl+i",
+                "command": "stgit.open",
+                "when": "!terminalFocus"
+            },
+            {
+                "key": "ctrl+c ctrl+c",
+                "command": "editor.action.submitComment",
+                "when": "resourceScheme == stgit && commentEditorFocused"
+            },
+            {
+                "key": "escape",
+                "command": "stgit.cancel",
+                "when": "resourceScheme == stgit"
+            },
+            {
+                "key": "h",
+                "command": "sdiff.help",
+                "when": "resourceScheme == stgit-diff && editorTextFocus"
+            },
+            {
+                "key": "p",
+                "command": "sdiff.gotoPreviousHunk",
+                "when": "resourceScheme == stgit-diff && editorTextFocus"
+            },
+            {
+                "key": "n",
+                "command": "sdiff.gotoNextHunk",
+                "when": "resourceScheme == stgit-diff && editorTextFocus"
+            },
+            {
+                "key": "ctrl-c ctrl-a",
+                "command": "sdiff.applyHunk",
+                "when": "resourceScheme == stgit-diff && editorTextFocus"
+            },
+            {
+                "key": "ctrl-c ctrl-u",
+                "command": "sdiff.revertHunk",
+                "when": "resourceScheme == stgit-diff && editorTextFocus"
+            },
+            {
+                "key": "s",
+                "command": "sdiff.stageHunk",
+                "when": "resourceScheme == stgit-diff && editorTextFocus"
+            },
+            {
+                "key": "u",
+                "command": "sdiff.unstageHunk",
+                "when": "resourceScheme == stgit-diff && editorTextFocus"
+            },
+            {
+                "key": "enter",
+                "command": "sdiff.openFile",
+                "when": "resourceScheme == stgit-diff && editorTextFocus"
+            },
+            {
+                "key": "ctrl-c ctrl-s",
+                "command": "sdiff.splitHunk",
+                "when": "resourceScheme == stgit-diff && editorTextFocus"
+            },
+            {
+                "key": "ctrl-x =",
+                "command": "sdiff.openCurrentFileDiff",
+                "when": "editorTextFocus && !editorReadonly && !inDiffEditor"
+            }
+        ]
     },
     "scripts": {
         "vscode:prepublish": "npm run compile",
         "compile": "tsc -p ./",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
         "watch": "tsc -watch -p ./",
         "pretest": "npm run compile && npm run lint",
         "lint": "eslint src --ext ts",
         "test": "node ./out/test/runTest.js",
+        "test:unit": "npm run compile && mocha --ui tdd \"out/test/unit/**/*.test.js\"",
+        "release": "npm run compile && node ./out/release.js",
         "package": "vsce package",
         "publish": "vsce publish"
     },
@@ -541,11 +669,13 @@
         "@typescript-eslint/eslint-plugin": "^5.59.0",
         "@typescript-eslint/parser": "^5.59.0",
         "@vscode/test-electron": "^2.1.5",
+        "@vscode/vsce": "^3.6.0",
         "eslint": "^8.41.0",
+        "eslint-config-prettier": "^9.1.2",
         "glob": "^8.0.3",
         "js-yaml": "^4.1.0",
         "mocha": "^10.0.0",
-        "typescript": "^5.0.4",
-        "@vscode/vsce": "^3.6.0"
+        "prettier": "^3.9.9",
+        "typescript": "^5.0.4"
     }
 }

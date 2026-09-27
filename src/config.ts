@@ -1,10 +1,10 @@
 // Copyright (C) 2022-2023, Samuel Rydh <samuelrydh@gmail.com>
 // This code is licensed under the BSD 2-Clause license.
 
-import * as vscode from 'vscode';
-import { workspace } from 'vscode';
-import { log } from './extension';
-import { getStGitVersion } from './git';
+import * as vscode from "vscode";
+import { workspace } from "vscode";
+import { log } from "./extension";
+import { getStGitVersion } from "./git";
 
 class StGitConfig {
     static instance: StGitConfig | null = null;
@@ -19,8 +19,7 @@ class StGitConfig {
         context.subscriptions.push(
             this,
             workspace.onDidChangeConfiguration((ev) => {
-                if (ev.affectsConfiguration('stgit'))
-                    this.configChanged.fire();
+                if (ev.affectsConfiguration("stgit")) this.configChanged.fire();
             }),
         );
         this.onDidChangeConfiguration(() => this.fetchConfig());
@@ -37,10 +36,10 @@ class StGitConfig {
     }
 
     private fetchConfig() {
-        const config = workspace.getConfiguration('stgit');
-        this.gitExecutable = config.get('gitExecutable') ?? "git";
-        this.stgitExecutable = config.get('stgitExecutable') ?? "stg";
-        this.showUnknownFiles = config.get('showUnknownFiles', false);
+        const config = workspace.getConfiguration("stgit");
+        this.gitExecutable = config.get("gitExecutable") ?? "git";
+        this.stgitExecutable = config.get("stgitExecutable") ?? "stg";
+        this.showUnknownFiles = config.get("showUnknownFiles", false);
     }
 
     private trackStGitVersion() {
@@ -63,8 +62,7 @@ class StGitConfig {
 }
 
 export function getStGitConfig(): StGitConfig {
-    if (!StGitConfig.instance)
-        throw new Error("config error: StGit extension not loaded");
+    if (!StGitConfig.instance) throw new Error("config error: StGit extension not loaded");
     return StGitConfig.instance;
 }
 
