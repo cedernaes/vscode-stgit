@@ -1,6 +1,7 @@
 // Copyright (C) 2022-2023, Samuel Rydh <samuelrydh@gmail.com>
 // This code is licensed under the BSD 2-Clause license.
 
+import * as path from "path";
 import * as vscode from "vscode";
 import { workspace } from "vscode";
 import { run } from "./util";
@@ -68,7 +69,6 @@ export class RepositoryInfo {
 
         // parents = [immediate parent, ..., root]
         // root is parents[parents.length - 1]
-        const path = require("path");
         const rootDir = parents[parents.length - 1].topLevelDir;
         const relativePath = path.relative(rootDir, repo.topLevelDir);
 
@@ -105,7 +105,6 @@ export class RepositoryInfo {
         const activeEditor = vscode.window.activeTextEditor;
         let lookupPath: string | undefined;
         if (activeEditor && activeEditor.document.uri.scheme === "file") {
-            const path = require("path");
             lookupPath = path.dirname(activeEditor.document.uri.fsPath);
         }
         if (!lookupPath) {
