@@ -5,7 +5,7 @@ import * as vscode from "vscode";
 import { workspace, commands, window } from "vscode";
 import { openAndShowDiffDocument, openDiffDocument, refreshDiff } from "./diff-provider";
 import { info } from "./extension";
-import { reloadIndexAndWorkTree } from "./stgit";
+import { reloadIndexAndWorkTree, runStGitMutation } from "./stgit";
 import { isUnmerged, updateIndex } from "./git";
 import { runCommand } from "./util";
 import { RepositoryInfo } from "./repo";
@@ -223,8 +223,8 @@ class DiffMode {
     static instance: DiffMode | null;
 
     constructor(context: vscode.ExtensionContext) {
-        function cmd(cmd: string, func: (editor: vscode.TextEditor) => void) {
-            return commands.registerTextEditorCommand(`sdiff.${cmd}`, func);
+        function cmd(cmd: string, func: (editor: vscode.TextEditor) => void | Promise<unknown>) {
+            return commands.registerTextEditorCommand(`sdiff.${cmd}`, (editor) => runStGitMutation(() => func(editor)));
         }
         const subscriptions = context.subscriptions;
         subscriptions.push(
@@ -301,17 +301,17 @@ class DiffMode {
         const range = new vscode.Range(startPos, endPos);
         docEditor.revealRange(range, vscode.TextEditorRevealType.InCenter);
         const nl = toText.missingNewline || !toText.text.length ? "" : "\n";
-        docEditor.edit((builder) => {
+        await docEditor.edit((builder) => {
             builder.replace(range, toText.text.join("\n") + nl);
         });
     }
 
     applyHunk() {
-        this.doApplyHunk({ reverse: false });
+        return this.doApplyHunk({ reverse: false });
     }
 
     revertHunk() {
-        this.doApplyHunk({ reverse: true });
+        return this.doApplyHunk({ reverse: true });
     }
 
     private async stageOrUnstageHunk(opts: { stage: boolean }) {
@@ -374,11 +374,11 @@ class DiffMode {
     }
 
     stageHunk() {
-        this.stageOrUnstageHunk({ stage: true });
+        return this.stageOrUnstageHunk({ stage: true });
     }
 
     unstageHunk() {
-        this.stageOrUnstageHunk({ stage: false });
+        return this.stageOrUnstageHunk({ stage: false });
     }
 
     async splitHunk(editor: vscode.TextEditor) {
@@ -405,7 +405,7 @@ class DiffMode {
         }
         const newUri = withSplitLines(uri, splits);
         refreshDiff(newUri);
-        openAndShowDiffDocument(newUri, {
+        await openAndShowDiffDocument(newUri, {
             selection: new vscode.Selection(curLine, 0, curLine, 0),
         });
     }
@@ -428,14 +428,14 @@ class DiffMode {
             } else {
                 line = 0;
             }
-            window.showTextDocument(doc, {
+            await window.showTextDocument(doc, {
                 selection: new vscode.Range(line, 0, line, 0),
             });
         }
     }
 
-    help() {
-        commands.executeCommand("workbench.action.quickOpen", ">SDiff: ");
+    async help() {
+        await commands.executeCommand("workbench.action.quickOpen", ">SDiff: ");
     }
 
     async getSourceDoc(hunk: Hunk | null): Promise<vscode.TextDocument | null> {

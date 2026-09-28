@@ -12,6 +12,7 @@ import { getStGitConfig } from "./config";
 import { StGitStateMonitor, readRepositoryState } from "./state-monitor";
 import { RepositoryFollower } from "./repository-follower";
 import { RepoDisplayLoads, RepoReader } from "./repo-reader";
+import { MutationGate } from "./mutation-gate";
 
 const RENAMEOPTS: readonly string[] = ["--find-renames"];
 
@@ -340,6 +341,17 @@ export class History extends Patch {
 }
 
 class StGitDoc {
+    private readonly mutations = new MutationGate(
+        () => {
+            this.monitor.pause();
+            this.displayLoads.pause();
+        },
+        () => {
+            this.monitor.resume();
+            this.displayLoads.resume();
+            this.reload();
+        },
+    );
     private unknownFilesVisible = false;
     private monitor: StGitStateMonitor;
     private displayLoads: RepoDisplayLoads;
@@ -442,6 +454,10 @@ class StGitDoc {
 
     private get reader() {
         return this.displayLoads.currentReader;
+    }
+
+    runMutation<T>(action: () => T | Promise<T>): Promise<T> {
+        return this.mutations.run(action);
     }
 
     private get patches() {
@@ -608,7 +624,7 @@ class StGitDoc {
             info("More than one patch is selected.");
             return;
         }
-        this.refresh(["-p", marked[0].label]);
+        await this.refresh(["-p", marked[0].label]);
     }
     async repair() {
         await run("stg", ["repair"]);
@@ -700,7 +716,7 @@ class StGitDoc {
     async createPatch() {
         const patch = this.index.deltas.length ? this.index : this.workTree;
         const line = patch.lineNum + patch.deltas.length;
-        this.openCommentEditor(line, "", "stgit");
+        await this.openCommentEditor(line, "", "stgit");
     }
     async editCommitMessage() {
         const p = this.curPatch;
@@ -708,7 +724,7 @@ class StGitDoc {
         this.editPatch = p;
         const sha = (await p.getSha()) ?? "error retrieving commit message>";
         const msg = await run("git", ["show", "-s", sha, "--format=%B"]);
-        this.openCommentEditor(p.lineNum, msg, "stgit-edit");
+        await this.openCommentEditor(p.lineNum, msg, "stgit-edit");
     }
     async copyCommitSha() {
         const sha = await this.curPatch?.getSha();
@@ -719,10 +735,10 @@ class StGitDoc {
     async commentCreatePatch() {
         if (this.commentThread) {
             const msg = this.commentThread.comments[0].body;
-            this.cancel();
+            await this.cancel();
             if (msg) {
                 await run("stg", ["new", "-m", msg as string]);
-                this.refresh();
+                await this.refresh();
             }
         }
     }
@@ -730,7 +746,7 @@ class StGitDoc {
         if (this.commentThread) {
             const msg = this.commentThread.comments[0].body;
             const editPatch = this.editPatch;
-            this.cancel();
+            await this.cancel();
             if (msg && editPatch) {
                 await run("stg", ["edit", "-m", msg as string, "--", editPatch.label]);
                 this.reload();
@@ -738,7 +754,7 @@ class StGitDoc {
         }
     }
     focusWindow() {
-        window.showTextDocument(this.doc, {
+        return window.showTextDocument(this.doc, {
             preview: false,
             viewColumn: this.mainViewColumn,
         });
@@ -753,7 +769,7 @@ class StGitDoc {
                 preserveFocus: false,
             };
             await vscode.window.showTextDocument(e.document.uri, opts);
-            commands.executeCommand("workbench.action.closeActiveEditor");
+            await commands.executeCommand("workbench.action.closeActiveEditor");
         }
     }
     async cancel() {
@@ -761,7 +777,7 @@ class StGitDoc {
         this.commentThread = null;
         this.editPatch = null;
         await this.closeAllDiffEditors();
-        this.focusWindow();
+        await this.focusWindow();
     }
     async squashPatches() {
         const patches = this.patches.filter((p) => p.marked);
@@ -823,7 +839,7 @@ class StGitDoc {
             if (this.workTree.deltas.includes(delta)) {
                 dstUri = this.repo.getPathUri(delta.destPath ?? delta.path);
             }
-            vscode.commands.executeCommand("vscode.diff", srcUri, dstUri, `Diff ${delta.path}`, opts);
+            await vscode.commands.executeCommand("vscode.diff", srcUri, dstUri, `Diff ${delta.path}`, opts);
         }
     }
     private async selectMergeDiffMode(delta: Delta): Promise<string | null> {
@@ -869,20 +885,20 @@ class StGitDoc {
             const uri = vscode.Uri.parse(`stgit-diff:///${spec}`);
             // If the uri is already open, we must force a refresh
             if (!invariant) refreshDiff(uri);
-            openAndShowDiffDocument(uri, {
+            await openAndShowDiffDocument(uri, {
                 viewColumn: this.alternateViewColumn,
                 preserveFocus: opts.preserveFocus,
             });
         }
     }
     showDiff() {
-        this.showDiffWithOpts({ preserveFocus: true });
+        return this.showDiffWithOpts({ preserveFocus: true });
     }
     openDiff() {
-        this.showDiffWithOpts({ preserveFocus: false });
+        return this.showDiffWithOpts({ preserveFocus: false });
     }
     async help() {
-        vscode.commands.executeCommand("workbench.action.quickOpen", ">StGit: ");
+        await vscode.commands.executeCommand("workbench.action.quickOpen", ">StGit: ");
     }
     async newPatch() {
         await run("stg", ["new", "-m", "New patch"]);
@@ -914,7 +930,7 @@ class StGitDoc {
         if (!branch) {
             return;
         } else if (branch.includes("Create new branch")) {
-            this.createBranch();
+            await this.createBranch();
         } else if (branch) {
             await runAndReportErrors("git", ["switch", branch]);
             this.newUpstream = false;
@@ -1045,7 +1061,7 @@ class StGitDoc {
             if (!uri) return;
             const doc = await workspace.openTextDocument(uri);
             if (doc)
-                window.showTextDocument(doc, {
+                await window.showTextDocument(doc, {
                     viewColumn: this.alternateViewColumn,
                 });
         } else if (patch && patch.lineNum === this.curLine) {
@@ -1054,8 +1070,8 @@ class StGitDoc {
         } else {
             const line = this.editor?.document.lineAt(this.curLine);
             if (line?.text.startsWith("!")) {
-                if (this.needRepair) this.repair();
-                else if (!this.branchInitialized) this.initializeBranch();
+                if (this.needRepair) await this.repair();
+                else if (!this.branchInitialized) await this.initializeBranch();
             }
         }
     }
@@ -1083,7 +1099,7 @@ class StGitDoc {
         const parent = this.parentRepoStack.at(-1)!;
         const context = await RepositoryInfo.buildParentStack(parent.repo);
         this.switchRepository(parent.repo, context);
-        await this.moveCursorToDelta(parent.submodulePath);
+        void this.moveCursorToDelta(parent.submodulePath);
     }
     async resolveConflict() {
         const change = this.curChange;
@@ -1434,12 +1450,17 @@ class StGitMode {
                 return next;
             },
         };
-        function cmd(cmd: string, func: () => void) {
-            return commands.registerTextEditorCommand(`stgit.${cmd}`, func);
-        }
-        function globalCmd(cmd: string, func: () => void) {
-            return commands.registerCommand(`stgit.${cmd}`, func);
-        }
+        const cmd = (cmd: string, func: () => void | Promise<unknown>) => {
+            return commands.registerTextEditorCommand(`stgit.${cmd}`, () => {
+                const doc = this.stgit;
+                return doc ? doc.runMutation(func) : func();
+            });
+        };
+        const globalCmd = (cmd: string, func: () => void | Promise<unknown>) =>
+            commands.registerCommand(`stgit.${cmd}`, () => {
+                const doc = this.stgit;
+                return doc ? doc.runMutation(func) : func();
+            });
         context.subscriptions.push(
             this /* self dispose */,
 
@@ -1563,7 +1584,7 @@ class StGitMode {
                 const context = await RepositoryInfo.buildParentStack(repo);
                 this.stgit.switchRepository(repo, context);
             }
-            this.stgit.focusWindow();
+            await this.stgit.focusWindow();
             this.stgit.reload();
         } else {
             const repo = await RepositoryInfo.lookup();
@@ -1594,4 +1615,9 @@ export function registerStGitMode(context: vscode.ExtensionContext) {
 
 export function reloadIndexAndWorkTree() {
     StGitMode.instance?.stgit?.reloadIndexAndWorkTree();
+}
+
+export function runStGitMutation<T>(action: () => T | Promise<T>): Promise<T> {
+    const doc = StGitMode.instance?.stgit;
+    return doc ? doc.runMutation(action) : Promise.resolve().then(action);
 }

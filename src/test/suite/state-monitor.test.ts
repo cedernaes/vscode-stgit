@@ -73,6 +73,51 @@ suite("StGit state monitor", () => {
         }
     });
 
+    test("suspends checks and file notifications until resumed", async () => {
+        let reads = 0;
+        const subject = setup(async () => String(++reads));
+        try {
+            await subject.monitor.check();
+            subject.changed("/first/file");
+            subject.monitor.pause();
+            assert.strictEqual(subject.disposals, 1);
+            await subject.monitor.check();
+            await new Promise((resolve) => setTimeout(resolve, 320));
+            assert.strictEqual(reads, 1);
+            assert.strictEqual(subject.workTreeReloads, 0);
+            subject.monitor.resume();
+            await subject.monitor.check();
+            assert.strictEqual(subject.reloads, 0);
+            assert.strictEqual(reads, 2);
+        } finally {
+            subject.monitor.dispose();
+        }
+    });
+
+    test("does not publish a probe that finishes after the monitor resumes", async () => {
+        let finishRead!: (value: string) => void;
+        const subject = setup(
+            () =>
+                new Promise<string>((resolve) => {
+                    finishRead = resolve;
+                }),
+        );
+        try {
+            const check = subject.monitor.check();
+            subject.monitor.pause();
+            subject.monitor.resume();
+            finishRead("partial state");
+            await check;
+            assert.strictEqual(subject.reloads, 0);
+            const nextCheck = subject.monitor.check();
+            finishRead("complete state");
+            await nextCheck;
+            assert.strictEqual(subject.reloads, 0);
+        } finally {
+            subject.monitor.dispose();
+        }
+    });
+
     test("switches watchers and starts a new baseline for each repo", async () => {
         const subject = setup(async (repo) => repo.gitDir);
         try {

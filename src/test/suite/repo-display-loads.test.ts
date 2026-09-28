@@ -12,6 +12,57 @@ function deferred<T>() {
 }
 
 suite("Repository display loads", () => {
+    test("invalidates in-flight results and skips loads during a mutation", async () => {
+        const oldSeries = deferred<string>();
+        const oldChanges = deferred<string>();
+        const shown: string[] = [];
+        const errors: unknown[] = [];
+        let readsDuringPause = 0;
+        const loads = new RepoDisplayLoads({ topLevelDir: "/repo" }, { run: async () => "", runCommand: async () => ({ stdout: "", stderr: "", ecode: 0 }) }, (_kind, error) =>
+            errors.push(error),
+        );
+        const series = loads.loadSeries(
+            () => oldSeries.promise,
+            (value) => shown.push(value),
+        );
+        const changes = loads.loadChanges(
+            () => oldChanges.promise,
+            (value) => shown.push(value),
+        );
+        loads.pause();
+        await loads.loadSeries(
+            async () => {
+                readsDuringPause++;
+                return "partial series";
+            },
+            (value) => shown.push(value),
+        );
+        await loads.loadChanges(
+            async () => {
+                readsDuringPause++;
+                return "partial changes";
+            },
+            (value) => shown.push(value),
+        );
+        loads.resume();
+        oldSeries.resolve("old series");
+        oldChanges.reject(new Error("old failure"));
+        await Promise.all([series, changes]);
+        assert.strictEqual(readsDuringPause, 0);
+        assert.strictEqual(shown.length, 0);
+        assert.deepStrictEqual(errors, []);
+        await loads.loadSeries(
+            async () => "current series",
+            (value) => shown.push(value),
+        );
+        await loads.loadChanges(
+            async () => "current changes",
+            (value) => shown.push(value),
+        );
+        assert.deepStrictEqual(shown, ["current series", "current changes"]);
+        loads.dispose();
+    });
+
     test("keeps old reads in their repo without publishing them", async () => {
         const oldSeries = deferred<string>();
         const oldIndex = deferred<string>();

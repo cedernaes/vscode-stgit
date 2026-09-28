@@ -46,6 +46,7 @@ export class RepoDisplayLoads {
     private reader: RepoReader;
     private readonly series = new LatestLoad();
     private readonly changes = new LatestLoad();
+    private paused = false;
 
     constructor(
         repo: { topLevelDir: string },
@@ -62,6 +63,16 @@ export class RepoDisplayLoads {
         return this.reader;
     }
 
+    pause() {
+        this.paused = true;
+        this.series.invalidate();
+        this.changes.invalidate();
+    }
+
+    resume() {
+        this.paused = false;
+    }
+
     switchRepository(repo: { topLevelDir: string }) {
         this.series.invalidate();
         this.changes.invalidate();
@@ -69,6 +80,7 @@ export class RepoDisplayLoads {
     }
 
     loadSeries<T>(read: (reader: RepoReader) => Promise<T>, publish: (value: T) => void) {
+        if (this.paused) return Promise.resolve();
         const reader = this.reader;
         return this.series.run(
             () => read(reader),
@@ -78,6 +90,7 @@ export class RepoDisplayLoads {
     }
 
     loadChanges<T>(read: (reader: RepoReader) => Promise<T>, publish: (value: T) => void) {
+        if (this.paused) return Promise.resolve();
         const reader = this.reader;
         return this.changes.run(
             () => read(reader),
