@@ -15,6 +15,7 @@ repository. Changes up to that version are documented in its
 ### Fixed
 
 - Fixed an issue where the background checks would lock the Git index, preventing regular StGit operations.
+- StGit and diff-editor changes suppress new checks and discard stale results without waiting for in-flight reads.
 
 ## [1.0.0] - 2026-09-27
 
