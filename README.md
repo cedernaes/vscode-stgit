@@ -2,22 +2,17 @@
 
 > A maintained fork of [srydh/vscode-stgit](https://github.com/srydh/vscode-stgit). This fork is a drop-in replacement.
 
-> [!IMPORTANT]
->
-> **You must uninstall the original `samuelrydh.stgit` extension before installing this one.** Both
-> contribute the same command and language identifiers, and VSCode has no way to resolve
-> the conflict.
-
 The main purpose of this extension is making it easy to modify, amend, reorder, squash or split commits during development with VSCode.
 
 This extension provides a frontend to StGit, which is an external command line tool for managing patch series in the form of Git commits. Refer to the [StGit homepage](https://stacked-git.github.io/) for more details about StGit.
 
 The functionality of this extension is heavily inspired by a corresponding Emacs mode for StGit, originally written by David Kågedal.
 
+Install [StGit Revived](https://marketplace.visualstudio.com/items?itemName=cedernaes.stgit-revived) from the VS Code Marketplace.
+
 ## Features
 
-The StGit patch series is displayed in a window. StGit and Git operations, bound to various keyboard shortcuts, allow the series to be reworked
-as desired.
+The StGit patch series is displayed in a window. StGit and Git operations, bound to various keyboard shortcuts, allow the series to be reworked as desired.
 
 The extension also provides an Emacs-like diff mode, which among other things allows individual hunks to be applied, staged or split into smaller hunks.
 
@@ -33,18 +28,15 @@ While the StGit window is open, it follows the repository of the active file, in
 
 This extension requires StGit to be installed (the executable is called `stg`). The tool is available in most distributions (e.g. through "`brew install stgit`" on macOS). It can also be downloaded from GitHub [here](https://stacked-git.github.io).
 
-## Git History Format
+> [!IMPORTANT]
+>
+> **You must uninstall the original `samuelrydh.stgit` extension before installing this one.** Both contribute the same command and language identifiers, and VSCode has no way to resolve the conflict.
+
+## Configuration
+
+### Git History Format
 
 Git history entries use the effective `format.pretty` Git configuration. Custom `format:` and `tformat:` values and named `pretty.<name>` aliases are supported. Multiline output is flattened to one line, and terminal colors are omitted. If no reusable one-line format is configured, the extension uses `%h   %s`.
-
-<!--
-## Extension Settings
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: enable/disable this extension
-* `myExtension.thing`: set to `blah` to do something
--->
 
 ## Known Issues
 
@@ -52,5 +44,4 @@ The StGit extension can be used together with the popular Vim mode for VsCode, b
 
 ## Release Notes
 
-The latest release notes are available
-[here](https://github.com/cedernaes/vscode-stgit/blob/main/CHANGELOG.md).
+The latest release notes are available [here](https://github.com/cedernaes/vscode-stgit/blob/main/CHANGELOG.md).
