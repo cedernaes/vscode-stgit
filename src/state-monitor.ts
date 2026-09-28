@@ -1,8 +1,18 @@
 import * as path from "path";
 import type { RepositoryInfo } from "./repo";
+import type { runCommand } from "./util";
 
 type Watcher = { dispose(): void };
 type MonitoredRepository = Pick<RepositoryInfo, "gitDir" | "topLevelDir">;
+
+export async function readRepositoryState(repo: MonitoredRepository, commandRunner: typeof runCommand): Promise<string> {
+    const options = { cwd: repo.topLevelDir, env: { GIT_OPTIONAL_LOCKS: "0" }, inhibitLogging: true };
+    const [series, status] = await Promise.all([
+        commandRunner("stg", ["series", "-ae", "--commit-id=40", "--description"], options),
+        commandRunner("git", ["status", "--porcelain=v2", "-b"], options),
+    ]);
+    return JSON.stringify([repo.gitDir, series.ecode, series.stdout, status.ecode, status.stdout]);
+}
 
 export interface StateMonitorSources {
     readState(repo: MonitoredRepository): Promise<string>;
