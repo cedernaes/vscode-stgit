@@ -9,7 +9,7 @@ import { log, info, showStatusMessage, getUserConfirmation } from "./extension";
 import { uncommitFiles } from "./git";
 import { RepositoryInfo } from "./repo";
 import { getStGitConfig } from "./config";
-import { StGitStateMonitor } from "./state-monitor";
+import { StGitStateMonitor, readRepositoryState } from "./state-monitor";
 import { RepositoryFollower } from "./repository-follower";
 import { RepoDisplayLoads, RepoReader } from "./repo-reader";
 
@@ -420,19 +420,7 @@ class StGitDoc {
         this.reload();
         this.openInitialEditor();
         this.monitor = new StGitStateMonitor(repo, {
-            readState: async (currentRepo) => {
-                const [series, status] = await Promise.all([
-                    runCommand("stg", ["series", "-ae", "--commit-id=40", "--description"], {
-                        cwd: currentRepo.topLevelDir,
-                        inhibitLogging: true,
-                    }),
-                    runCommand("git", ["status", "--porcelain=v2", "-b"], {
-                        cwd: currentRepo.topLevelDir,
-                        inhibitLogging: true,
-                    }),
-                ]);
-                return JSON.stringify([currentRepo.gitDir, series.ecode, series.stdout, status.ecode, status.stdout]);
-            },
+            readState: (currentRepo) => readRepositoryState(currentRepo, runCommand),
             watchFiles: (currentRepo, changed) => {
                 const watcher = workspace.createFileSystemWatcher(new vscode.RelativePattern(currentRepo.topLevelDir, "**/*"));
                 const onChange = (uri: vscode.Uri) => changed(uri.fsPath);

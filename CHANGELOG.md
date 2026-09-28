@@ -12,6 +12,10 @@ repository. Changes up to that version are documented in its
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed an issue where the background checks would lock the Git index, preventing regular StGit operations.
+
 ## [1.0.0] - 2026-09-27
 
 ### Added

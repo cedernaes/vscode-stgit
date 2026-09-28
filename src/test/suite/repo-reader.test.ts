@@ -5,6 +5,27 @@ suite("Repo-bound display loads", () => {
     const unexpectedError = (error: unknown) => {
         assert.fail(String(error));
     };
+    test("keeps display reads nonlocking while preserving caller environment", async () => {
+        const calls: Array<{ command: string; cwd?: string; env?: { [key: string]: string } }> = [];
+        const commands = {
+            run: async (command: "git" | "stg", _args: string[], opts?: { cwd?: string; env?: { [key: string]: string } }) => {
+                calls.push({ command, cwd: opts?.cwd, env: opts?.env });
+                return "";
+            },
+            runCommand: async (command: "git" | "stg", _args: string[], opts?: { cwd?: string; env?: { [key: string]: string } }) => {
+                calls.push({ command, cwd: opts?.cwd, env: opts?.env });
+                return { stdout: "", stderr: "", ecode: 0 };
+            },
+        };
+        const reader = new RepoReader({ topLevelDir: "/repo" }, commands);
+        await reader.run("git", ["diff"], { env: { CUSTOM: "value" } });
+        await reader.runCommand("stg", ["series"]);
+        assert.deepStrictEqual(calls, [
+            { command: "git", cwd: "/repo", env: { GIT_OPTIONAL_LOCKS: "0", CUSTOM: "value" } },
+            { command: "stg", cwd: "/repo", env: { GIT_OPTIONAL_LOCKS: "0" } },
+        ]);
+    });
+
     test("uses the repository captured at construction", async () => {
         const calls: string[] = [];
         const repo = { topLevelDir: "/first" };

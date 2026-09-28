@@ -14,11 +14,11 @@ export class RepoReader {
     }
 
     run(command: Parameters<typeof run>[0], args: string[], opts?: Parameters<typeof run>[2]) {
-        return this.commands.run(command, args, { ...opts, cwd: this.cwd });
+        return this.commands.run(command, args, { ...opts, env: { GIT_OPTIONAL_LOCKS: "0", ...opts?.env }, cwd: this.cwd });
     }
 
     runCommand(command: Parameters<typeof runCommand>[0], args: string[], opts?: Parameters<typeof runCommand>[2]) {
-        return this.commands.runCommand(command, args, { ...opts, cwd: this.cwd });
+        return this.commands.runCommand(command, args, { ...opts, env: { GIT_OPTIONAL_LOCKS: "0", ...opts?.env }, cwd: this.cwd });
     }
 }
 

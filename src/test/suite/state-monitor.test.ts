@@ -1,5 +1,5 @@
 import * as assert from "assert";
-import { StGitStateMonitor, StateMonitorSources } from "../../state-monitor";
+import { StGitStateMonitor, StateMonitorSources, readRepositoryState } from "../../state-monitor";
 
 const firstRepo = { gitDir: "/first/.git", topLevelDir: "/first" };
 const secondRepo = { gitDir: "/second/.git", topLevelDir: "/second" };
@@ -43,6 +43,19 @@ function setup(readState: StateMonitorSources["readState"]) {
 }
 
 suite("StGit state monitor", () => {
+    test("samples repository state without optional index locks", async () => {
+        const calls: Array<{ command: string; cwd?: string; optionalLocks?: string; inhibitLogging?: boolean }> = [];
+        const snapshot = await readRepositoryState(firstRepo, async (command, _args, opts) => {
+            calls.push({ command, cwd: opts?.cwd, optionalLocks: opts?.env?.GIT_OPTIONAL_LOCKS, inhibitLogging: opts?.inhibitLogging });
+            return { stdout: command, stderr: "", ecode: 0 };
+        });
+        assert.deepStrictEqual(calls, [
+            { command: "stg", cwd: "/first", optionalLocks: "0", inhibitLogging: true },
+            { command: "git", cwd: "/first", optionalLocks: "0", inhibitLogging: true },
+        ]);
+        assert.strictEqual(snapshot, JSON.stringify([firstRepo.gitDir, 0, "stg", 0, "git"]));
+    });
+
     test("reloads only when the external state changes", async () => {
         let state = "initial";
         const subject = setup(async () => state);
