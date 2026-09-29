@@ -1,0 +1,39 @@
+// SYNTAX TEST "source.stgit" "StGit document rows"
+Submodule: libs/core
+// <---------- entity.name.type.submodule.stgit
+//            ^^^^^^^^^ entity.name.type.submodule.stgit
+Branch: main <-> fork/main
+// <------ source.stgit - history.stgit
+//       ^^^^ source.stgit - history.stgit
+
+▸ eae3b88 N 2026-09-29.. emaus        Use GitHub alert syntax for the hint  HEAD -> main, fork/main
+// <----- string.regexp history.stgit
+//   ^^^^^^^^ string.regexp history.stgit
+▾ abc1234 Previous change
+// <----- string.regexp history.stgit
+     <no files>
+// <----- comment
+▸ def5678 Earlier change
+// <----- string.regexp history.stgit
+>  ▾ current [review]
+//     ^^^^^^^ markup.bold patch.stgit curpatch.stgit
+//             ^^^^^^^^ keyword.operator
+     Rename 91%       old.txt -> new.txt
+//   ^^^^^^ invalid
+   ▾ Index
+// <--- variable index.stgit
+     Modified         file.txt
+// <----- invalid
+//   ^^^^^^^^ invalid
+     Modified         libs/core [submodule]
+//   ^^^^^^^^ invalid
+//                              ^^^^^^^^^^^ entity.name.type.submodule.stgit
+     <no files>
+// <----- comment
+//   ^^^^^^^^^^ comment
+   ▾ Work Tree [+untracked]
+// <--- variable index.stgit
+     <unknown>        scratch.txt
+//   ^^^^^^^^^ comment
+    Modified          old-spacing.txt
+// <---- - invalid

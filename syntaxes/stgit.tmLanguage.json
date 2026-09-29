@@ -18,9 +18,9 @@
         "history": {
             "patterns": [
                 {
-                    "begin": "^  (?=[^ ])",
+                    "begin": "^[▸▾] ",
                     "end": "$",
-                    "contentName": "string.regexp history.stgit"
+                    "name": "string.regexp history.stgit"
                 },
                 {
                     "patterns": [{ "include": "#outer" }]
@@ -30,8 +30,12 @@
         "outer": {
             "patterns": [
                 {
+                    "match": "^Submodule: .*$",
+                    "name": "entity.name.type.submodule.stgit"
+                },
+                {
                     "begin": "^Branch",
-                    "while": "(?=^(  |$))",
+                    "while": "(?=^([▸▾] |     |$))",
                     "patterns": [{ "include": "#history" }]
                 },
                 {
@@ -61,11 +65,15 @@
                     "name": "variable index.stgit"
                 },
                 {
-                    "match": "^    [a-zA-Z]+",
+                    "match": "^     [a-zA-Z]+",
                     "name": "invalid"
                 },
                 {
-                    "match": "^    <.*>",
+                    "match": "(?<= )\\[submodule\\](?=\\s*$)",
+                    "name": "entity.name.type.submodule.stgit"
+                },
+                {
+                    "match": "^     <.*>",
                     "name": "comment"
                 }
             ]

@@ -83,7 +83,7 @@ export class Delta {
         const s = `${what}${similarity}${this.permissionDelta}`;
         const dest = this.destPath ? ` -> ${this.destPath}` : "";
         const submoduleMarker = this.isSubmodule ? " [submodule]" : "";
-        const s2 = `    ${s.padEnd(16)} ${this.path}${dest}${submoduleMarker}`;
+        const s2 = `     ${s.padEnd(16)} ${this.path}${dest}${submoduleMarker}`;
         const sinfo = this.stageInfoString;
         if (!sinfo && !dest && !submoduleMarker) return s2;
         return `${s2.padEnd(50)} ${sinfo}`;
@@ -149,7 +149,7 @@ abstract class Patch {
         if (this.expanded) {
             for (const d of this.deltas) lines.push(d.docLine);
             if (!this.deltas.length) {
-                lines.push("    <no files>");
+                lines.push("     <no files>");
             }
         }
         return lines;
@@ -395,7 +395,6 @@ class StGitDoc {
 
     private highlightRanges: vscode.Range[] = [];
     private historyRanges: vscode.Range[] = [];
-    private submoduleRanges: vscode.Range[] = [];
 
     constructor(
         public doc: vscode.TextDocument,
@@ -1298,21 +1297,6 @@ class StGitDoc {
     private updateDecorations() {
         this.highlightRanges = this.applied.filter((p) => p.deltas.some((d) => this.highlightPaths?.has(d.path))).map((p) => new vscode.Range(p.lineNum, 2, p.lineNum, 2));
         this.historyRanges = this.history.map((p) => new vscode.Range(p.lineNum, 0, p.lineNum, 999));
-        // Submodule line is line 0 when inside a submodule
-        this.submoduleRanges = this.relativePathFromRoot ? [new vscode.Range(0, 0, 0, 999)] : [];
-        // Also highlight [submodule] suffix on delta lines
-        for (const p of this.patches) {
-            if (p.lineCount <= 1) continue;
-            for (let i = 0; i < p.deltas.length; i++) {
-                const d = p.deltas[i];
-                if (!d.isSubmodule) continue;
-                const line = p.lineNum + i + 1;
-                const col = d.docLine.indexOf("[submodule]");
-                if (col >= 0) {
-                    this.submoduleRanges.push(new vscode.Range(line, col, line, col + "[submodule]".length));
-                }
-            }
-        }
         this.updateEditorDecorations();
     }
 
@@ -1323,7 +1307,6 @@ class StGitDoc {
             const cls = StGitMode.instance!;
             editor.setDecorations(cls.fileHighlightDecoration, this.highlightRanges);
             editor.setDecorations(cls.historyDecoration, this.historyRanges);
-            editor.setDecorations(cls.submoduleDecoration, this.submoduleRanges);
         }
     }
 
@@ -1423,11 +1406,6 @@ class StGitMode {
     readonly historyDecoration = window.createTextEditorDecorationType({
         dark: { color: "#777" },
         light: { color: "#999" },
-    });
-    readonly submoduleDecoration = window.createTextEditorDecorationType({
-        dark: { color: "#4EC9B0" }, // Teal/cyan color
-        light: { color: "#16825D" }, // Darker green for light themes
-        fontStyle: "italic",
     });
     constructor(context: vscode.ExtensionContext) {
         const provider: vscode.TextDocumentContentProvider = {
@@ -1569,7 +1547,6 @@ class StGitMode {
 
         this.fileHighlightDecoration.dispose();
         this.historyDecoration.dispose();
-        this.submoduleDecoration.dispose();
     }
     private async openStgit() {
         if (this.stgit) {
