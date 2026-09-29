@@ -12,6 +12,8 @@ repository. Changes up to that version are documented in its
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-09-29
+
 ### Fixed
 
 - Removed indentation markers (folding) from the StGit buffer.
