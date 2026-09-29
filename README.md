@@ -20,7 +20,9 @@ While the StGit window is open, it follows the repository of the active file, in
 
 ![Example](images/example.png)
 
-> Hint: To enter StGit, press `Ctrl-C Ctrl-I` or run the "`StGit: Open...`"
+> [!TIP]
+>
+> To enter StGit, press `Ctrl-C Ctrl-I` or run the "`StGit: Open...`"
 > command. In the `StGit` window, press `h` to list all available StGit
 > operations.
 
