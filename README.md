@@ -18,7 +18,7 @@ The extension also provides an Emacs-like diff mode, which among other things al
 
 While the StGit window is open, it follows the repository of the active file, including files in submodules.
 
-![StGit](images/example.png)
+![Example](images/example.png)
 
 > Hint: To enter StGit, press `Ctrl-C Ctrl-I` or run the "`StGit: Open...`"
 > command. In the `StGit` window, press `h` to list all available StGit
