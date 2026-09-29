@@ -1,8 +1,8 @@
 name: Release
 
 # Cuts a release on demand: bumps the version, closes the "[Unreleased]"
-# changelog section, tags the release commit and publishes a GitHub release
-# with the changelog entries, GitHub's auto-generated notes and the .vsix.
+# changelog section, tags the release commit, publishes the .vsix to the
+# Marketplace and creates a GitHub release with the same .vsix and notes.
 on:
     workflow_dispatch:
         inputs:
@@ -16,12 +16,12 @@ on:
                 default: patch
                 required: true
             dry_run:
-                description: Build everything, but do not push or publish
+                description: "dry_run: do not push or publish"
                 type: boolean
                 default: false
 
 permissions:
-    contents: write
+    contents: read
 
 concurrency:
     group: release
@@ -29,6 +29,10 @@ concurrency:
 
 jobs:
     release:
+        if: ${{ github.ref == 'refs/heads/main' }}
+        environment: marketplace
+        permissions:
+            contents: write
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -67,6 +71,16 @@ jobs:
 
             - name: Package the extension
               run: npx vsce package --out "${{ steps.release.outputs.vsix }}"
+
+            - name: Check Marketplace publishing credential
+              if: ${{ !inputs.dry_run }}
+              env:
+                  VSCE_PAT: ${{ secrets.VSCE_PAT }}
+              run: |
+                  if [[ -z "$VSCE_PAT" ]]; then
+                      echo '::error::Configure the marketplace environment secret VSCE_PAT before releasing'
+                      exit 1
+                  fi
 
             - name: Commit and tag the release
               env:
@@ -107,6 +121,13 @@ jobs:
                   } > "$RUNNER_TEMP/release-body.md"
                   cat "$RUNNER_TEMP/release-body.md" >> "$GITHUB_STEP_SUMMARY"
 
+            - name: Publish to VS Code Marketplace
+              if: ${{ !inputs.dry_run }}
+              env:
+                  VSCE_PAT: ${{ secrets.VSCE_PAT }}
+                  VSIX: ${{ steps.release.outputs.vsix }}
+              run: npx vsce publish --packagePath "$VSIX"
+
             - name: Create the GitHub release
               if: ${{ !inputs.dry_run }}
               env:
@@ -121,6 +142,7 @@ jobs:
                       "$VSIX"
 
             - name: Upload the build artifacts
+              if: ${{ !cancelled() && steps.release.outputs.version != '' }}
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
                   name: stgit-${{ steps.release.outputs.version }}
