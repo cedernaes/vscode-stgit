@@ -29,11 +29,11 @@ suite("Extension Test Suite", () => {
             },
         );
         const workTree = new WorkTree(reader, false);
-        assert.deepStrictEqual(workTree.getLines(), ["   ▾ Work Tree", "    <no files>"]);
+        assert.deepStrictEqual(workTree.getLines(), ["   ▾ Work Tree", "     <no files>"]);
         await workTree.toggleExpanded();
         assert.deepStrictEqual(workTree.getLines(), ["   ▸ Work Tree"]);
         await workTree.toggleExpanded();
-        assert.deepStrictEqual(workTree.getLines(), ["   ▾ Work Tree", "    <no files>"]);
+        assert.deepStrictEqual(workTree.getLines(), ["   ▾ Work Tree", "     <no files>"]);
     });
 
     test("Shows when untracked files are included, even when collapsed", async () => {
@@ -45,7 +45,7 @@ suite("Extension Test Suite", () => {
             },
         );
         const workTree = new WorkTree(reader, true);
-        assert.deepStrictEqual(workTree.getLines(), ["   ▾ Work Tree [+untracked]", "    <no files>"]);
+        assert.deepStrictEqual(workTree.getLines(), ["   ▾ Work Tree [+untracked]", "     <no files>"]);
         await workTree.toggleExpanded();
         assert.deepStrictEqual(workTree.getLines(), ["   ▸ Work Tree [+untracked]"]);
     });
@@ -61,7 +61,7 @@ suite("Extension Test Suite", () => {
         const [commit] = await History.fromRev(reader, "HEAD", 1);
         assert.deepStrictEqual(commit.getLines(), ["▸ abc12   Committed change"]);
         await commit.toggleExpanded();
-        assert.deepStrictEqual(commit.getLines(), ["▾ abc12   Committed change", "    <no files>"]);
+        assert.deepStrictEqual(commit.getLines(), ["▾ abc12   Committed change", "     <no files>"]);
         await commit.toggleExpanded();
         assert.deepStrictEqual(commit.getLines(), ["▸ abc12   Committed change"]);
     });
@@ -78,8 +78,8 @@ suite("Extension Test Suite", () => {
     });
 
     test("Keeps the cursor on its file when a redraw changes line counts", () => {
-        const before = "Branch\nIndex\n    Modified  file-a\nWork Tree";
-        const after = "Branch\nIndex\n    Modified  file-b\n" + "    Modified  file-a\nWork Tree";
+        const before = "Branch\nIndex\n     Modified  file-a\nWork Tree";
+        const after = "Branch\nIndex\n     Modified  file-b\n" + "     Modified  file-a\nWork Tree";
         assert.strictEqual(correspondingLine(before, after, 2), 3);
         assert.strictEqual(correspondingLine(after, before, 3), 2);
         assert.strictEqual(correspondingLine(before, before, 2), 2);

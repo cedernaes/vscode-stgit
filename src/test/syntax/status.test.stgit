@@ -1,0 +1,14 @@
+// SYNTAX TEST "source.stgit" "StGit empty stack and warnings"
+> <no patch applied>
+//^^^ markup.bold patch.stgit curpatch.stgit
+! *** StGit not installed ('stg' binary missing) ***
+//^^^ invalid
+//     ^^^^^ invalid
+! *** Setup branch for StGit ('stg init') ***
+//^^^ invalid
+//     ^^^^^ invalid
+! *** Repair needed [C-u g] ***
+//^^^ invalid
+//     ^^^^^ invalid
+   ▾ Index
+// <--- variable index.stgit

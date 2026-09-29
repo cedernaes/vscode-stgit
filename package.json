@@ -654,10 +654,11 @@
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "watch": "tsc -watch -p ./",
-        "pretest": "npm run compile && npm run lint",
+        "pretest": "npm run compile && npm run lint && npm run test:grammar",
         "lint": "eslint src --ext ts",
         "test": "node ./out/test/runTest.js",
-        "test:unit": "npm run compile && mocha --ui tdd \"out/test/unit/**/*.test.js\"",
+        "test:unit": "npm run compile && mocha --ui tdd \"out/test/unit/**/*.test.js\" && npm run test:grammar",
+        "test:grammar": "vscode-tmgrammar-test 'src/test/syntax/*.test.stgit'",
         "release": "npm run compile && node ./out/release.js",
         "package": "vsce package",
         "publish": "vsce publish"
@@ -677,6 +678,7 @@
         "js-yaml": "^4.1.0",
         "mocha": "^10.0.0",
         "prettier": "^3.9.9",
-        "typescript": "^5.0.4"
+        "typescript": "^5.0.4",
+        "vscode-tmgrammar-test": "^0.1.3"
     }
 }
