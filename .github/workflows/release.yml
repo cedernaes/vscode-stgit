@@ -2,7 +2,8 @@ name: Release
 
 # Cuts a release on demand: bumps the version, closes the "[Unreleased]"
 # changelog section, tags the release commit and publishes a GitHub release
-# with the changelog entries, GitHub's auto-generated notes and the .vsix.
+# with the changelog entries, GitHub's auto-generated notes and the .vsix. The
+# publish workflow then puts that same .vsix on the VS Code Marketplace.
 on:
     workflow_dispatch:
         inputs:
@@ -16,12 +17,12 @@ on:
                 default: patch
                 required: true
             dry_run:
-                description: Build everything, but do not push or publish
+                description: "dry_run: do not push or publish"
                 type: boolean
                 default: false
 
 permissions:
-    contents: write
+    contents: read
 
 concurrency:
     group: release
@@ -29,7 +30,12 @@ concurrency:
 
 jobs:
     release:
+        if: ${{ github.ref == 'refs/heads/main' }}
+        permissions:
+            contents: write
         runs-on: ubuntu-latest
+        outputs:
+            tag: ${{ steps.release.outputs.tag }}
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
@@ -121,9 +127,20 @@ jobs:
                       "$VSIX"
 
             - name: Upload the build artifacts
+              if: ${{ !cancelled() && steps.release.outputs.version != '' }}
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
                   name: stgit-${{ steps.release.outputs.version }}
                   path: |
                       ${{ steps.release.outputs.vsix }}
                       ${{ runner.temp }}/release-body.md
+
+    publish:
+        needs: release
+        if: ${{ !inputs.dry_run }}
+        permissions:
+            contents: read
+            id-token: write
+        uses: ./.github/workflows/publish.yml
+        with:
+            tag: ${{ needs.release.outputs.tag }}

@@ -1,0 +1,75 @@
+name: Publish
+
+# Publishes the .vsix attached to an existing GitHub release to the VS Code
+# Marketplace. The release workflow calls it once the GitHub release is out,
+# and it can also be dispatched by hand to retry a failed publish.
+#
+# Signs in to Microsoft Entra ID through GitHub's OIDC token, so there is no
+# long-lived secret. The managed identity behind AZURE_CLIENT_ID needs a
+# federated credential for this repository's "marketplace" environment, and
+# must be a Contributor on the Marketplace publisher.
+on:
+    workflow_call:
+        inputs:
+            tag:
+                description: The release tag whose .vsix to publish
+                type: string
+                required: true
+    workflow_dispatch:
+        inputs:
+            tag:
+                description: The release tag whose .vsix to publish, e.g. v1.2.3
+                type: string
+                required: true
+
+permissions:
+    contents: read
+
+jobs:
+    marketplace:
+        if: ${{ github.ref == 'refs/heads/main' }}
+        environment: marketplace
+        permissions:
+            contents: read
+            id-token: write
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+              with:
+                  node-version: 24
+                  cache: npm
+
+            - run: npm ci
+
+            - name: Download the .vsix from the GitHub release
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  TAG: ${{ inputs.tag }}
+              run: |
+                  gh release download "$TAG" \
+                      --pattern '*.vsix' \
+                      --dir "$RUNNER_TEMP/vsix"
+
+            - name: Sign in to Microsoft Entra ID
+              uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+              with:
+                  client-id: ${{ secrets.AZURE_CLIENT_ID }}
+                  tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+                  # Publishing needs no Azure role, only the Marketplace one.
+                  allow-no-subscriptions: true
+
+            - name: Show the identity's Marketplace ID
+              # The ID to add as a member of the Marketplace publisher.
+              run: |
+                  az rest \
+                      --url https://app.vssps.visualstudio.com/_apis/profile/profiles/me \
+                      --resource 499b84ac-1321-427f-aa17-267ca6975798 \
+                      --query id --output tsv
+
+            - name: Publish to VS Code Marketplace
+              # Skipping a version that is already out keeps retries safe.
+              run: |
+                  npx vsce publish --azure-credential --skip-duplicate \
+                      --packagePath "$RUNNER_TEMP"/vsix/*.vsix
