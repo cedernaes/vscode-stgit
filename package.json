@@ -29,7 +29,8 @@
     "contributes": {
         "configurationDefaults": {
             "[stgit-buffer]": {
-                "editor.folding": false
+                "editor.folding": false,
+                "editor.guides.indentation": false
             }
         },
         "configuration": {
