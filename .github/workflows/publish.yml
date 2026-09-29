@@ -15,6 +15,13 @@ on:
                 description: The release tag whose .vsix to publish
                 type: string
                 required: true
+        secrets:
+            AZURE_CLIENT_ID:
+                description: The client ID of the Azure managed identity
+                required: true
+            AZURE_TENANT_ID:
+                description: The tenant ID of the Azure managed identity
+                required: true
     workflow_dispatch:
         inputs:
             tag:
