@@ -57,7 +57,7 @@
                     "contentName": "invalid"
                 },
                 {
-                    "match": "^  (Index|Work Tree)",
+                    "match": "^   [▸▾] (Index|Work Tree)",
                     "name": "variable index.stgit"
                 },
                 {

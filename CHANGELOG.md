@@ -12,6 +12,10 @@ repository. Changes up to that version are documented in its
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed a regression in the syntax highlighting for the StGit buffer, causing the index/work to show as white.
+
 ## [1.0.1] - 2026-09-28
 
 ### Fixed
