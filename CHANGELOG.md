@@ -12,6 +12,11 @@ repository. Changes up to that version are documented in its
 
 ## [Unreleased]
 
+### Fixed
+
+- Removed indentation markers (folding) from the StGit buffer.
+- Indented the file listings a bit more in the StGit buffer, to logically group them better.
+
 ## [1.0.2] - 2026-09-29
 
 ### Fixed
