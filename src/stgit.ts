@@ -3,6 +3,7 @@
 
 import * as vscode from "vscode";
 import { commands, window, workspace } from "vscode";
+import { confirmCommentDiscard } from "./comment-discard";
 import { getStGitConfig } from "./config";
 import { openAndShowDiffDocument, refreshDiff } from "./diff-provider";
 import { getUserConfirmation, info, log, showStatusMessage } from "./extension";
@@ -11,7 +12,7 @@ import { MutationGate } from "./mutation-gate";
 import { RepositoryInfo } from "./repo";
 import { RepoDisplayLoads, RepoReader } from "./repo-reader";
 import { RepositoryFollower } from "./repository-follower";
-import { correspondingLine, nextStagedFileLine } from "./stage-selection";
+import { correspondingLine, nextStagedFileLine, remainingIndexFileLine } from "./stage-selection";
 import { StGitStateMonitor, readRepositoryState } from "./state-monitor";
 import { run, runAndReportErrors, runCommand, sleep } from "./util";
 
@@ -662,7 +663,10 @@ class StGitDoc {
         }
         this.reload();
     }
-    private async openCommentEditor(line: number, body: string, context: string) {
+    private async openCommentEditor(line: number, body: string, context: string, editPatch: Patch | null = null) {
+        if (this.commentThread && !(await this.confirmDiscardComment())) {
+            return;
+        }
         const comment: vscode.Comment = {
             contextValue: context,
             body: body,
@@ -683,6 +687,7 @@ class StGitDoc {
         thread.collapsibleState = vscode.CommentThreadCollapsibleState.Collapsed;
         thread.state = vscode.CommentThreadState.Unresolved;
         this.commentThread = thread;
+        this.editPatch = editPatch;
 
         const delay = vscode.env.remoteName ? 400 : 200;
         await sleep(delay);
@@ -705,10 +710,9 @@ class StGitDoc {
     async editCommitMessage() {
         const p = this.curPatch;
         if (!p || !["+", "-"].includes(p.kind)) return;
-        this.editPatch = p;
         const sha = (await p.getSha()) ?? "error retrieving commit message>";
         const msg = await run("git", ["show", "-s", sha, "--format=%B"]);
-        await this.openCommentEditor(p.lineNum, msg, "stgit-edit");
+        await this.openCommentEditor(p.lineNum, msg, "stgit-edit", p);
     }
     async copyCommitSha() {
         const sha = await this.curPatch?.getSha();
@@ -719,7 +723,7 @@ class StGitDoc {
     async commentCreatePatch() {
         if (this.commentThread) {
             const msg = this.commentThread.comments[0].body;
-            await this.cancel();
+            await this.closeCommentEditor();
             if (msg) {
                 await run("stg", ["new", "-m", msg as string]);
                 await this.refresh();
@@ -730,7 +734,7 @@ class StGitDoc {
         if (this.commentThread) {
             const msg = this.commentThread.comments[0].body;
             const editPatch = this.editPatch;
-            await this.cancel();
+            await this.closeCommentEditor();
             if (msg && editPatch) {
                 await run("stg", ["edit", "-m", msg as string, "--", editPatch.label]);
                 this.reload();
@@ -756,12 +760,29 @@ class StGitDoc {
             await commands.executeCommand("workbench.action.closeActiveEditor");
         }
     }
-    async cancel() {
+    private async closeCommentEditor() {
         this.commentThread?.dispose();
         this.commentThread = null;
         this.editPatch = null;
         await this.closeAllDiffEditors();
         await this.focusWindow();
+    }
+    private confirmDiscardComment(): Promise<boolean> {
+        return confirmCommentDiscard(!!this.commentThread, async () => {
+            const choice = await window.showWarningMessage("Close the commit message editor? Unsaved changes may be lost.", { modal: true }, "Discard and Close");
+            return choice === "Discard and Close";
+        });
+    }
+    async cancel() {
+        if (!(await this.confirmDiscardComment())) return;
+        await this.closeCommentEditor();
+    }
+    async cancelEmptyComment() {
+        if (this.commentThread?.contextValue === "stgit") {
+            await this.closeCommentEditor();
+        } else {
+            await this.cancel();
+        }
     }
     async squashPatches() {
         const patches = this.patches.filter((p) => p.marked);
@@ -1108,18 +1129,26 @@ class StGitDoc {
             if (change) {
                 if (change.deleted) await run("git", ["rm", "--", change.path]);
                 else await run("git", ["add", "--", change.path, ...(change.destPath ? [change.destPath] : [])]);
-                if (this.editor) {
-                    const nextLine = nextStagedFileLine(patch.lineNum, patch.deltas.indexOf(change), patch.deltas.length);
-                    const pos = new vscode.Position(nextLine, this.editor.selection.active.character);
-                    this.editor.selection = new vscode.Selection(pos, pos);
+                const editor = this.editor;
+                const nextLine = nextStagedFileLine(patch.lineNum, patch.deltas.indexOf(change), patch.deltas.length);
+                if (editor && nextLine !== undefined) {
+                    const pos = new vscode.Position(nextLine, editor.selection.active.character);
+                    editor.selection = new vscode.Selection(pos, pos);
                 }
             } else {
                 await run("git", ["add", "-u"]);
             }
             this.reloadIndexAndWorkTree();
         } else if (patch?.kind == "I") {
-            if (change) await run("git", ["restore", "-S", "--", change.path, ...(change.destPath ? [change.destPath] : [])]);
-            else await run("git", ["reset", "HEAD"]);
+            if (change) {
+                await run("git", ["restore", "-S", "--", change.path, ...(change.destPath ? [change.destPath] : [])]);
+                const editor = this.editor;
+                if (editor) {
+                    const line = remainingIndexFileLine(patch.lineNum, patch.deltas.indexOf(change), patch.deltas.length);
+                    const pos = new vscode.Position(line, editor.selection.active.character);
+                    editor.selection = new vscode.Selection(pos, pos);
+                }
+            } else await run("git", ["reset", "HEAD"]);
             this.reloadIndexAndWorkTree();
         } else if (patch && patch === this.applied.at(-1)) {
             if (change) await uncommitFiles([change.path, ...(change.destPath ? [change.destPath] : [])]);
@@ -1484,6 +1513,7 @@ class StGitMode {
             cmd("commentCreatePatch", () => this.stgit?.commentCreatePatch()),
             cmd("completePatchEdit", () => this.stgit?.completePatchEdit()),
             cmd("cancel", () => this.stgit?.cancel()),
+            cmd("cancelEmptyComment", () => this.stgit?.cancelEmptyComment()),
             cmd("editCommitMessage", () => this.stgit?.editCommitMessage()),
             cmd("copyCommitSha", () => this.stgit?.copyCommitSha()),
             cmd("squashPatches", () => this.stgit?.squashPatches()),
