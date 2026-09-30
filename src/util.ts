@@ -38,12 +38,18 @@ interface CommandResult {
 export async function runCommand(command: Command, args: string[], opts?: RunOpts): Promise<CommandResult> {
     let cmd: string;
     const config = getStGitConfig();
-    if (command === "git") cmd = config.gitExecutable;
-    else if (command === "stg") cmd = config.stgitExecutable;
-    else throw new Error("Unexpected command");
+    if (command === "git") {
+        cmd = config.gitExecutable;
+    } else if (command === "stg") {
+        cmd = config.stgitExecutable;
+    } else {
+        throw new Error("Unexpected command");
+    }
 
     const cwd = opts?.cwd ?? (await RepositoryInfo.getSelectedRepo())?.topLevelDir;
-    if (!cwd) return { stdout: "", stderr: "", ecode: -1 };
+    if (!cwd) {
+        return { stdout: "", stderr: "", ecode: -1 };
+    }
     const env = opts?.env ? { ...process.env, ...opts.env } : undefined;
     const stdinPipe = opts?.stdin ? "pipe" : "ignore";
     const proc = spawn(cmd, args, {
@@ -75,7 +81,9 @@ export async function runCommand(command: Command, args: string[], opts?: RunOpt
             resolve();
         });
     });
-    if (exitCode !== 0 && !opts?.inhibitLogging) log(["[failed]", command, ...args].join(" "));
+    if (exitCode !== 0 && !opts?.inhibitLogging) {
+        log(["[failed]", command, ...args].join(" "));
+    }
     const stdout = data.join("");
     return {
         stdout: opts?.trim !== false ? stdout.trimEnd() : stdout,
@@ -102,7 +110,9 @@ export async function runAndReportErrors(command: Command, args: string[], opts?
                 .split("\n")
                 .filter((s) => s.includes(":"))
                 .join("\n");
-            if (m) estr = m;
+            if (m) {
+                estr = m;
+            }
         }
         if (opts?.errorMsg) {
             info(opts.errorMsg);
@@ -110,7 +120,9 @@ export async function runAndReportErrors(command: Command, args: string[], opts?
         } else {
             const [part1, ...rest] = estr.split("\n");
             info(part1);
-            if (rest.length !== 0) log(rest.join("\n"));
+            if (rest.length !== 0) {
+                log(rest.join("\n"));
+            }
         }
     }
     return result;

@@ -36,7 +36,9 @@ export class RepositoryInfo {
 
     private static async create(ws: string) {
         const [topDir, gitDir] = await Promise.all([this.findTopLevelDir(ws), this.findGitDir(ws)]);
-        if (topDir && gitDir) return new RepositoryInfo(gitDir, topDir);
+        if (topDir && gitDir) {
+            return new RepositoryInfo(gitDir, topDir);
+        }
         return null;
     }
 
@@ -59,13 +61,19 @@ export class RepositoryInfo {
         let current = repo;
         for (;;) {
             const superDir = await this.findSuperprojectDir(current.topLevelDir);
-            if (!superDir) break;
+            if (!superDir) {
+                break;
+            }
             const parent = await this.create(superDir);
-            if (!parent) break;
+            if (!parent) {
+                break;
+            }
             parents.push(parent);
             current = parent;
         }
-        if (parents.length === 0) return { stack: [], relativePath: "" };
+        if (parents.length === 0) {
+            return { stack: [], relativePath: "" };
+        }
 
         // parents = [immediate parent, ..., root]
         // root is parents[parents.length - 1]
@@ -110,7 +118,9 @@ export class RepositoryInfo {
         if (!lookupPath) {
             lookupPath = workspace.workspaceFolders?.[0]?.uri.path;
         }
-        if (!lookupPath) return null;
+        if (!lookupPath) {
+            return null;
+        }
 
         this.selectedRepo = this.create(lookupPath);
         return this.selectedRepo;

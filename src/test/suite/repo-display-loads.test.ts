@@ -71,8 +71,12 @@ suite("Repository display loads", () => {
             run: async (_command: "git" | "stg", args: string[], opts?: { cwd?: string }) => {
                 const key = `${opts?.cwd}:${args[0]}`;
                 calls.push(key);
-                if (key === "/old:branch") return oldSeries.promise;
-                if (key === "/old:index") return oldIndex.promise;
+                if (key === "/old:branch") {
+                    return oldSeries.promise;
+                }
+                if (key === "/old:index") {
+                    return oldIndex.promise;
+                }
                 return key;
             },
             runCommand: async () => ({ stdout: "", stderr: "", ecode: 0 }),

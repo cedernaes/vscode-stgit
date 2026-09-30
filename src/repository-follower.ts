@@ -19,9 +19,13 @@ export class RepositoryFollower<Repo extends Repository, Context> {
     async followFile(file: string) {
         const requestId = ++this.requestId;
         const repo = await this.sources.lookup(path.dirname(file));
-        if (!repo || requestId !== this.requestId || repo.gitDir === this.sources.current()?.gitDir) return;
+        if (!repo || requestId !== this.requestId || repo.gitDir === this.sources.current()?.gitDir) {
+            return;
+        }
         const context = await this.sources.loadContext(repo);
-        if (requestId === this.requestId && this.sources.current() && repo.gitDir !== this.sources.current()?.gitDir) this.sources.switchTo(repo, context);
+        if (requestId === this.requestId && this.sources.current() && repo.gitDir !== this.sources.current()?.gitDir) {
+            this.sources.switchTo(repo, context);
+        }
     }
 
     cancel() {

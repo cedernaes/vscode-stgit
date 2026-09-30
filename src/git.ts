@@ -21,7 +21,9 @@ export async function updateIndex(path: string, contents: { data?: string; mode?
         const re = /([0-9]*) ([0-9a-f]*) [0-3]/;
         [, mode, sha] = s.match(re) ?? [];
     }
-    if (!mode) mode = "100644";
+    if (!mode) {
+        mode = "100644";
+    }
     if (contents.data !== undefined) {
         sha = await run("git", ["hash-object", "-w", "--stdin"], {
             stdin: contents.data ?? "",
@@ -37,12 +39,19 @@ export async function updateIndex(path: string, contents: { data?: string; mode?
 
 export async function uncommitFiles(files?: string[]) {
     const repo = await RepositoryInfo.getSelectedRepo();
-    if (!repo) return;
+    if (!repo) {
+        return;
+    }
     const index = await run("git", ["write-tree"]);
-    if (index === "") return;
+    if (index === "") {
+        return;
+    }
     await run("git", ["reset", "--mixed", "-q", "HEAD"]);
-    if (files) await run("git", ["reset", "-q", "HEAD^", "--", ...files]);
-    else await run("git", ["read-tree", "HEAD^"]);
+    if (files) {
+        await run("git", ["reset", "-q", "HEAD^", "--", ...files]);
+    } else {
+        await run("git", ["read-tree", "HEAD^"]);
+    }
 
     if (!(await hasStGit2())) {
         // Workaround a problem in StGit 1.x where the refresh fails
@@ -73,11 +82,17 @@ export function getStGitVersion(opts?: { forceRefresh?: boolean }): Promise<stri
     async function getter(): Promise<string> {
         const result = await run("stg", ["version", "-s"]);
         for (const s of result.split("\n")) {
-            if (s.startsWith("Stacked Git ")) return s.split("\n")[0].replace("Stacked Git ", "").trim();
-            if (s.startsWith("stg ")) return s.replace("stg ", "").trim();
+            if (s.startsWith("Stacked Git ")) {
+                return s.split("\n")[0].replace("Stacked Git ", "").trim();
+            }
+            if (s.startsWith("stg ")) {
+                return s.replace("stg ", "").trim();
+            }
         }
         return "";
     }
-    if (!stgVersionGetter || opts?.forceRefresh) stgVersionGetter = getter();
+    if (!stgVersionGetter || opts?.forceRefresh) {
+        stgVersionGetter = getter();
+    }
     return stgVersionGetter;
 }

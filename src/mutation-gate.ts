@@ -9,7 +9,9 @@ export class MutationGate {
 
     run<T>(action: () => T | Promise<T>): Promise<T> {
         this.pending++;
-        if (this.pending === 1) this.pause();
+        if (this.pending === 1) {
+            this.pause();
+        }
         const current = this.tail.then(action);
         this.tail = current.then(
             () => undefined,
@@ -17,7 +19,9 @@ export class MutationGate {
         );
         return current.finally(() => {
             this.pending--;
-            if (this.pending === 0) this.resume();
+            if (this.pending === 0) {
+                this.resume();
+            }
         });
     }
 }

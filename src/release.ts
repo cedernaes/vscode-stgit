@@ -31,7 +31,9 @@ export function isBumpKind(kind: string): kind is BumpKind {
 
 export function parseVersion(version: string): Version {
     const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(version.trim());
-    if (!m) throw new Error(`Not an 'x.y.z' version: '${version}'`);
+    if (!m) {
+        throw new Error(`Not an 'x.y.z' version: '${version}'`);
+    }
     return {
         major: parseInt(m[1], 10),
         minor: parseInt(m[2], 10),
@@ -62,7 +64,9 @@ export function parsePackageVersion(json: string): string {
     } catch (e) {
         throw new Error(`package.json is not valid JSON: ${String(e)}`);
     }
-    if (typeof pkg.version !== "string") throw new Error("package.json has no 'version' string");
+    if (typeof pkg.version !== "string") {
+        throw new Error("package.json has no 'version' string");
+    }
     parseVersion(pkg.version);
     return pkg.version;
 }
@@ -79,7 +83,9 @@ export function setPackageVersion(json: string, version: string): string {
     const current = parsePackageVersion(json);
     parseVersion(version);
     const re = new RegExp(`("version"\\s*:\\s*")${escapeRegExp(current)}(")`);
-    if (!re.test(json)) throw new Error(`Could not locate the '${current}' version field`);
+    if (!re.test(json)) {
+        throw new Error(`Could not locate the '${current}' version field`);
+    }
     return json.replace(re, `$1${version}$2`);
 }
 
@@ -113,21 +119,29 @@ function versionHeadingRe(version: string): RegExp {
 
 function dropTrailingBlanks(lines: string[]): string[] {
     const end = [...lines];
-    while (end.length && end[end.length - 1].trim() === "") end.pop();
+    while (end.length && end[end.length - 1].trim() === "") {
+        end.pop();
+    }
     return end;
 }
 
 function dropLeadingBlanks(lines: string[]): string[] {
     let i = 0;
-    while (i < lines.length && lines[i].trim() === "") i++;
+    while (i < lines.length && lines[i].trim() === "") {
+        i++;
+    }
     return lines.slice(i);
 }
 
 function findSection(lines: string[], matches: (line: string) => boolean) {
     const start = lines.findIndex(matches);
-    if (start < 0) return undefined;
+    if (start < 0) {
+        return undefined;
+    }
     let end = start + 1;
-    while (end < lines.length && !isSectionHeading(lines[end])) end++;
+    while (end < lines.length && !isSectionHeading(lines[end])) {
+        end++;
+    }
     return { start, end, body: lines.slice(start + 1, end) };
 }
 
@@ -143,7 +157,9 @@ export function releaseDate(now: Date = new Date()): string {
 }
 
 function checkDate(date: string) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`Not a 'YYYY-MM-DD' date: '${date}'`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        throw new Error(`Not a 'YYYY-MM-DD' date: '${date}'`);
+    }
 }
 
 /**
@@ -155,9 +171,15 @@ export function releaseUnreleasedSection(changelog: string, version: string, dat
     checkDate(date);
     const lines = changelog.split("\n");
     const section = findSection(lines, isUnreleasedHeading);
-    if (!section) throw new Error(`CHANGELOG.md has no '${unreleasedHeading}' section`);
-    if (isEmptyChangelogBody(section.body)) throw new Error(`The '${unreleasedHeading}' section is empty; nothing to release`);
-    if (findSection(lines, (line) => versionHeadingRe(version).test(line))) throw new Error(`CHANGELOG.md already has a ${version} section`);
+    if (!section) {
+        throw new Error(`CHANGELOG.md has no '${unreleasedHeading}' section`);
+    }
+    if (isEmptyChangelogBody(section.body)) {
+        throw new Error(`The '${unreleasedHeading}' section is empty; nothing to release`);
+    }
+    if (findSection(lines, (line) => versionHeadingRe(version).test(line))) {
+        throw new Error(`CHANGELOG.md already has a ${version} section`);
+    }
 
     const head = dropTrailingBlanks(lines.slice(0, section.start));
     const body = dropTrailingBlanks(dropLeadingBlanks(section.body));
@@ -174,7 +196,9 @@ export function extractReleaseNotes(changelog: string, version?: string): string
     const lines = changelog.split("\n");
     const matches = version ? (line: string) => versionHeadingRe(version).test(line) : (line: string) => /^##\s+\[\d+\.\d+\.\d+\]/.test(line);
     const section = findSection(lines, matches);
-    if (!section) throw new Error(version ? `CHANGELOG.md has no ${version} section` : "CHANGELOG.md has no released version section");
+    if (!section) {
+        throw new Error(version ? `CHANGELOG.md has no ${version} section` : "CHANGELOG.md has no released version section");
+    }
     const body = dropTrailingBlanks(dropLeadingBlanks(section.body));
     return body.length ? `${body.join("\n")}\n` : "";
 }
@@ -214,11 +238,15 @@ export function performRelease(opts: ReleaseOptions): ReleaseResult {
     const newLock = hasLock ? setLockVersion(fs.readFileSync(lockPath, "utf8"), version) : undefined;
 
     const changedFiles = ["package.json", "CHANGELOG.md"];
-    if (hasLock) changedFiles.push("package-lock.json");
+    if (hasLock) {
+        changedFiles.push("package-lock.json");
+    }
     if (!opts.dryRun) {
         fs.writeFileSync(packagePath, newPackageJson);
         fs.writeFileSync(changelogPath, newChangelog);
-        if (newLock !== undefined) fs.writeFileSync(lockPath, newLock);
+        if (newLock !== undefined) {
+            fs.writeFileSync(lockPath, newLock);
+        }
     }
     return {
         previousVersion,
@@ -238,14 +266,20 @@ export function runCli(argv: string[], root: string): string {
     const command = args[0] === "bump" ? args[1] : args[0];
 
     for (const flag of flags) {
-        if (!/^--(dry-run|date=\d{4}-\d{2}-\d{2}|help)$/.test(flag)) throw new Error(`Unknown option: ${flag}\n${usage}`);
+        if (!/^--(dry-run|date=\d{4}-\d{2}-\d{2}|help)$/.test(flag)) {
+            throw new Error(`Unknown option: ${flag}\n${usage}`);
+        }
     }
-    if (flags.includes("--help")) return usage;
+    if (flags.includes("--help")) {
+        return usage;
+    }
     if (command === "notes") {
         const changelog = fs.readFileSync(path.join(root, "CHANGELOG.md"), "utf8");
         return extractReleaseNotes(changelog, args[1]);
     }
-    if (!command || !isBumpKind(command)) throw new Error(`Expected 'major', 'minor' or 'patch'\n${usage}`);
+    if (!command || !isBumpKind(command)) {
+        throw new Error(`Expected 'major', 'minor' or 'patch'\n${usage}`);
+    }
     const dateFlag = flags.find((f) => f.startsWith("--date="));
     const result = performRelease({
         root,
@@ -254,7 +288,9 @@ export function runCli(argv: string[], root: string): string {
         dryRun: flags.includes("--dry-run"),
     });
     process.stderr.write(`${result.previousVersion} -> ${result.version} (${result.date})\n`);
-    if (flags.includes("--dry-run")) process.stderr.write("Dry run: no files were written\n");
+    if (flags.includes("--dry-run")) {
+        process.stderr.write("Dry run: no files were written\n");
+    }
     return result.version;
 }
 
@@ -268,4 +304,6 @@ function main() {
     }
 }
 
-if (require.main === module) main();
+if (require.main === module) {
+    main();
+}

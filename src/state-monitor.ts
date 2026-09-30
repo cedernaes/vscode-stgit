@@ -48,19 +48,25 @@ export class StGitStateMonitor {
         this.paused = true;
         this.watcher?.dispose();
         this.watcher = null;
-        if (this.workTreeTimer) clearTimeout(this.workTreeTimer);
+        if (this.workTreeTimer) {
+            clearTimeout(this.workTreeTimer);
+        }
         this.workTreeTimer = null;
     }
 
     resume() {
-        if (this.disposed || !this.paused) return;
+        if (this.disposed || !this.paused) {
+            return;
+        }
         this.paused = false;
         this.snapshot = null;
         this.watchFiles();
     }
 
     setRepository(repo: MonitoredRepository) {
-        if (this.repo.gitDir === repo.gitDir) return;
+        if (this.repo.gitDir === repo.gitDir) {
+            return;
+        }
         this.repo = repo;
         this.snapshot = null;
         this.watchFiles();
@@ -68,27 +74,43 @@ export class StGitStateMonitor {
 
     private watchFiles() {
         this.watcher?.dispose();
-        if (this.workTreeTimer) clearTimeout(this.workTreeTimer);
-        if (this.paused || this.disposed) return;
+        if (this.workTreeTimer) {
+            clearTimeout(this.workTreeTimer);
+        }
+        if (this.paused || this.disposed) {
+            return;
+        }
         const repo = this.repo;
         this.watcher = this.sources.watchFiles(repo, (file) => {
-            if (file === repo.gitDir || file.startsWith(repo.gitDir + path.sep)) return;
-            if (this.workTreeTimer) clearTimeout(this.workTreeTimer);
+            if (file === repo.gitDir || file.startsWith(repo.gitDir + path.sep)) {
+                return;
+            }
+            if (this.workTreeTimer) {
+                clearTimeout(this.workTreeTimer);
+            }
             this.workTreeTimer = setTimeout(() => {
-                if (!this.disposed && !this.paused && this.repo === repo) this.sources.reloadWorkTree();
+                if (!this.disposed && !this.paused && this.repo === repo) {
+                    this.sources.reloadWorkTree();
+                }
             }, 250);
         });
     }
 
     async check() {
-        if (this.checking || this.disposed || this.paused) return;
+        if (this.checking || this.disposed || this.paused) {
+            return;
+        }
         this.checking = true;
         const repo = this.repo;
         const generation = this.generation;
         try {
             const snapshot = await this.sources.readState(repo);
-            if (this.disposed || this.paused || this.repo !== repo || generation !== this.generation) return;
-            if (this.snapshot !== null && this.snapshot !== snapshot) this.sources.reload();
+            if (this.disposed || this.paused || this.repo !== repo || generation !== this.generation) {
+                return;
+            }
+            if (this.snapshot !== null && this.snapshot !== snapshot) {
+                this.sources.reload();
+            }
             this.snapshot = snapshot;
         } finally {
             this.checking = false;
@@ -97,8 +119,12 @@ export class StGitStateMonitor {
 
     dispose() {
         this.disposed = true;
-        if (this.interval) clearInterval(this.interval);
-        if (this.workTreeTimer) clearTimeout(this.workTreeTimer);
+        if (this.interval) {
+            clearInterval(this.interval);
+        }
+        if (this.workTreeTimer) {
+            clearTimeout(this.workTreeTimer);
+        }
         this.watcher?.dispose();
     }
 }

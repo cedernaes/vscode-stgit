@@ -19,7 +19,9 @@ class StGitConfig {
         context.subscriptions.push(
             this,
             workspace.onDidChangeConfiguration((ev) => {
-                if (ev.affectsConfiguration("stgit")) this.configChanged.fire();
+                if (ev.affectsConfiguration("stgit")) {
+                    this.configChanged.fire();
+                }
             }),
         );
         this.onDidChangeConfiguration(() => this.fetchConfig());
@@ -62,7 +64,9 @@ class StGitConfig {
 }
 
 export function getStGitConfig(): StGitConfig {
-    if (!StGitConfig.instance) throw new Error("config error: StGit extension not loaded");
+    if (!StGitConfig.instance) {
+        throw new Error("config error: StGit extension not loaded");
+    }
     return StGitConfig.instance;
 }
 
