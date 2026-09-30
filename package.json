@@ -2,7 +2,7 @@
     "name": "stgit-revived",
     "displayName": "StGit Revived",
     "description": "Git patch management tool using StGit. Actively maintained fork of srydh/vscode-stgit.",
-    "version": "1.0.3",
+    "version": "1.1.0",
     "engines": {
         "vscode": "^1.91.0"
     },

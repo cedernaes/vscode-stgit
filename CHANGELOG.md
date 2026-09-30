@@ -12,6 +12,8 @@ repository. Changes up to that version are documented in its
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-30
+
 ### Changed
 
 - Prompt before closing an edited commit message.
