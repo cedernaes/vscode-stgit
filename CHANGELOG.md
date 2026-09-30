@@ -12,6 +12,10 @@ repository. Changes up to that version are documented in its
 
 ## [Unreleased]
 
+### Fixed
+
+- Made the cursor go to the _next_ file in the list after staging one file so it's easy to stage multiple files after one another quicklyr.
+
 ## [1.0.3] - 2026-09-29
 
 ### Fixed

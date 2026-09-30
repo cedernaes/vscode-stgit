@@ -2,17 +2,18 @@
 // This code is licensed under the BSD 2-Clause license.
 
 import * as vscode from "vscode";
-import { workspace, window, commands } from "vscode";
-import { openAndShowDiffDocument, refreshDiff } from "./diff-provider";
-import { run, runAndReportErrors, runCommand, sleep } from "./util";
-import { log, info, showStatusMessage, getUserConfirmation } from "./extension";
-import { uncommitFiles } from "./git";
-import { RepositoryInfo } from "./repo";
+import { commands, window, workspace } from "vscode";
 import { getStGitConfig } from "./config";
-import { StGitStateMonitor, readRepositoryState } from "./state-monitor";
-import { RepositoryFollower } from "./repository-follower";
-import { RepoDisplayLoads, RepoReader } from "./repo-reader";
+import { openAndShowDiffDocument, refreshDiff } from "./diff-provider";
+import { getUserConfirmation, info, log, showStatusMessage } from "./extension";
+import { uncommitFiles } from "./git";
 import { MutationGate } from "./mutation-gate";
+import { RepositoryInfo } from "./repo";
+import { RepoDisplayLoads, RepoReader } from "./repo-reader";
+import { RepositoryFollower } from "./repository-follower";
+import { correspondingLine, nextStagedFileLine } from "./stage-selection";
+import { StGitStateMonitor, readRepositoryState } from "./state-monitor";
+import { run, runAndReportErrors, runCommand, sleep } from "./util";
 
 const RENAMEOPTS: readonly string[] = ["--find-renames"];
 
@@ -200,22 +201,6 @@ export function formatCommitDescription(description: string, commitMessage: stri
         .slice(1)
         .some((line) => line.trim() !== "");
     return hasBody ? `${description} […]` : description;
-}
-
-export function correspondingLine(previous: string, next: string, line: number): number {
-    const oldLines = previous.split("\n");
-    const newLines = next.split("\n");
-    const text = oldLines[line];
-    if (text === undefined) return Math.min(line, newLines.length - 1);
-    let prefix = 0;
-    while (prefix < oldLines.length && prefix < newLines.length && oldLines[prefix] === newLines[prefix]) prefix++;
-    if (line < prefix) return line;
-    let suffix = 0;
-    while (suffix < oldLines.length - prefix && suffix < newLines.length - prefix && oldLines[oldLines.length - suffix - 1] === newLines[newLines.length - suffix - 1]) suffix++;
-    if (line >= oldLines.length - suffix) return line + newLines.length - oldLines.length;
-    const matches = newLines.flatMap((value, index) => (value === text ? [index] : []));
-    if (matches.length) return matches.reduce((best, index) => (Math.abs(index - line) < Math.abs(best - line) ? index : best));
-    return Math.min(line, newLines.length - 1);
 }
 
 class StGitPatch extends Patch {
@@ -1123,6 +1108,11 @@ class StGitDoc {
             if (change) {
                 if (change.deleted) await run("git", ["rm", "--", change.path]);
                 else await run("git", ["add", "--", change.path, ...(change.destPath ? [change.destPath] : [])]);
+                if (this.editor) {
+                    const nextLine = nextStagedFileLine(patch.lineNum, patch.deltas.indexOf(change), patch.deltas.length);
+                    const pos = new vscode.Position(nextLine, this.editor.selection.active.character);
+                    this.editor.selection = new vscode.Selection(pos, pos);
+                }
             } else {
                 await run("git", ["add", "-u"]);
             }

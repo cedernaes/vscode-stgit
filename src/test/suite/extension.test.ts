@@ -5,7 +5,8 @@ import * as assert from "assert";
 import * as vscode from "vscode";
 import { findHunkTargetLine, HunkTarget } from "../../diff-mode";
 import { RepoReader } from "../../repo-reader";
-import { correspondingLine, formatCommitDescription, History, WorkTree } from "../../stgit";
+import { correspondingLine } from "../../stage-selection";
+import { formatCommitDescription, History, WorkTree } from "../../stgit";
 
 suite("Extension Test Suite", () => {
     vscode.window.showInformationMessage("Start all tests.");
