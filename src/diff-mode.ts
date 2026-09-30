@@ -56,19 +56,29 @@ export function findHunkTargetLine(lines: readonly string[], target: HunkTarget,
             toLine = parseInt(hunk[2]) - 1;
             const line = useToLine ? toLine : fromLine;
             const targetLine = useToLine ? target.toLine : target.fromLine;
-            if (!target.split && path === target.path && line === targetLine) return i;
+            if (!target.split && path === target.path && line === targetLine) {
+                return i;
+            }
             continue;
         }
-        if (!target.split || path !== target.path || !" +-\\".includes(text[0] ?? "")) continue;
+        if (!target.split || path !== target.path || !" +-\\".includes(text[0] ?? "")) {
+            continue;
+        }
 
         const line = useToLine ? toLine : fromLine;
         const targetLine = useToLine ? target.toLine : target.fromLine;
         if (line === targetLine) {
             fallback ??= i;
-            if (text === target.firstLine) return i;
+            if (text === target.firstLine) {
+                return i;
+            }
         }
-        if (text[0] === " " || text[0] === "-") fromLine++;
-        if (text[0] === " " || text[0] === "+") toLine++;
+        if (text[0] === " " || text[0] === "-") {
+            fromLine++;
+        }
+        if (text[0] === " " || text[0] === "+") {
+            toLine++;
+        }
     }
     return fallback;
 }
@@ -77,7 +87,9 @@ function locateLineInDoc(doc: vscode.TextDocument, needle: string, metric: (numb
     let [result, lowest]: [number | null, number] = [null, Infinity];
     for (let i = 0; i < doc.lineCount; i++) {
         const m = metric(i);
-        if (m < lowest && doc.lineAt(i).text === needle) [result, lowest] = [i, m];
+        if (m < lowest && doc.lineAt(i).text === needle) {
+            [result, lowest] = [i, m];
+        }
     }
     return result;
 }
@@ -91,12 +103,18 @@ class DiffHeader {
     static fromLine(doc: vscode.TextDocument, line: number): DiffHeader | null {
         let start = line;
         for (; start >= 0; start--) {
-            if (doc.lineAt(start).text.startsWith("--- ")) break;
+            if (doc.lineAt(start).text.startsWith("--- ")) {
+                break;
+            }
         }
-        if (start < 0) return null;
+        if (start < 0) {
+            return null;
+        }
         const fromStr = doc.lineAt(start).text;
         const toStr = doc.lineAt(start + 1).text;
-        if (!toStr.startsWith("+++ ")) return null;
+        if (!toStr.startsWith("+++ ")) {
+            return null;
+        }
 
         const fromPath = stripDiffPath(fromStr);
         const toPath = stripDiffPath(toStr);
@@ -115,7 +133,9 @@ class HunkText {
 
     static fromSpec(hunkLines: string[], spec: string): HunkText | null {
         const marker = spec[0];
-        if (marker !== "-" && marker !== "+") return null;
+        if (marker !== "-" && marker !== "+") {
+            return null;
+        }
         const [lineStr, countStr] = spec.slice(1).split(",");
         const srcLine = parseInt(lineStr) - 1;
         const numLines = parseInt(countStr ?? "1");
@@ -127,29 +147,43 @@ class HunkText {
             lineMap.push(lines.length);
             if (s.startsWith(marker) || s.startsWith(" ")) {
                 lines.push(s.slice(1));
-                if (hunkLines[i + 1]?.startsWith("\\")) missingNewline = true;
+                if (hunkLines[i + 1]?.startsWith("\\")) {
+                    missingNewline = true;
+                }
             }
         });
         return numLines === lines.length ? new HunkText(srcLine, lines, lineMap, missingNewline) : null;
     }
 
     private matchesAtLine(doc: { numLines: number; getLine: (line: number) => string }, line: number) {
-        if (line < 0 || line + this.text.length > doc.numLines) return false;
+        if (line < 0 || line + this.text.length > doc.numLines) {
+            return false;
+        }
         for (let i = 0; i < this.text.length; i++) {
-            if (doc.getLine(i + line) !== this.text[i]) return false;
+            if (doc.getLine(i + line) !== this.text[i]) {
+                return false;
+            }
         }
         return true;
     }
 
     private find(doc: { numLines: number; getLine: (line: number) => string }) {
         const line = Math.min(this.srcLine, doc.numLines - 1);
-        if (this.matchesAtLine(doc, line)) return line;
+        if (this.matchesAtLine(doc, line)) {
+            return line;
+        }
         for (let offs = 1; ; offs += 1) {
             const upLine = line - offs;
             const downLine = line + offs;
-            if (upLine < 0 && downLine >= doc.numLines) return -1;
-            if (this.matchesAtLine(doc, upLine)) return upLine;
-            if (this.matchesAtLine(doc, downLine)) return downLine;
+            if (upLine < 0 && downLine >= doc.numLines) {
+                return -1;
+            }
+            if (this.matchesAtLine(doc, upLine)) {
+                return upLine;
+            }
+            if (this.matchesAtLine(doc, downLine)) {
+                return downLine;
+            }
         }
     }
 
@@ -190,19 +224,25 @@ class Hunk {
 
     static fromLine(doc: vscode.TextDocument, line: number): Hunk | null {
         const atStr = doc.lineAt(line).text;
-        if (!atStr.startsWith("@@ ") || !atStr.includes("@@", 3)) return null;
+        if (!atStr.startsWith("@@ ") || !atStr.includes("@@", 3)) {
+            return null;
+        }
         const [fromSpec, toSpec] = atStr.slice(3).split("@@")[0].split(" ");
 
         const hunkLines: string[] = [];
         for (let i = line + 1; i < doc.lineCount; i++) {
             const s = doc.lineAt(i).text;
-            if (!s || !"+- \\".includes(s[0])) break;
+            if (!s || !"+- \\".includes(s[0])) {
+                break;
+            }
             hunkLines.push(s);
         }
 
         const fromText = HunkText.fromSpec(hunkLines, fromSpec);
         const toText = HunkText.fromSpec(hunkLines, toSpec);
-        if (!fromText || !toText) return null;
+        if (!fromText || !toText) {
+            return null;
+        }
 
         return new Hunk(line, fromText, toText, hunkLines.length + 1);
     }
@@ -213,7 +253,9 @@ class Hunk {
         const texts = this.toText.text.length ? [this.toText, this.fromText] : [this.fromText, this.toText];
         for (const t of texts) {
             const line = t.findInDoc(doc);
-            if (line >= 0) return { text: t, line: line };
+            if (line >= 0) {
+                return { text: t, line: line };
+            }
         }
         return null;
     }
@@ -247,7 +289,9 @@ class DiffMode {
 
     private gotoHunk(lineIncrement: number) {
         const editor = window.activeTextEditor;
-        if (!editor) return;
+        if (!editor) {
+            return;
+        }
         let line = editor.selection.start.line + lineIncrement;
         const lineCount = editor.document.lineCount;
         for (; line >= 0 && line < lineCount; line += lineIncrement) {
@@ -271,12 +315,16 @@ class DiffMode {
 
     private selectHunk(hunk: Hunk) {
         const editor = window.activeTextEditor;
-        if (editor) editor.selection = new vscode.Selection(hunk.line, 0, hunk.line, 0);
+        if (editor) {
+            editor.selection = new vscode.Selection(hunk.line, 0, hunk.line, 0);
+        }
     }
 
     private async doApplyHunk(opts: { reverse: boolean }) {
         const hunk = this.hunk;
-        if (!hunk) return;
+        if (!hunk) {
+            return;
+        }
         this.selectHunk(hunk);
         const [fromText, toText] = opts.reverse ? [hunk.toText, hunk.fromText] : [hunk.fromText, hunk.toText];
         const doc = await this.getSourceDoc(hunk);
@@ -286,8 +334,11 @@ class DiffMode {
         }
         const matchLine = fromText.findInDoc(doc);
         if (matchLine < 0) {
-            if (toText.findInDoc(doc) != -1) info("Patch already applied!");
-            else info("Failed to find text to patch");
+            if (toText.findInDoc(doc) != -1) {
+                info("Patch already applied!");
+            } else {
+                info("Failed to find text to patch");
+            }
             return;
         }
         this.gotoNextHunk();
@@ -318,7 +369,9 @@ class DiffMode {
         const editor = window.activeTextEditor;
         const hunk = this.hunk;
         const header = this.getHeader(hunk);
-        if (!editor || !hunk || !header) return;
+        if (!editor || !hunk || !header) {
+            return;
+        }
         const uri = editor.document.uri;
         const splits = splitLines(uri);
         const nextHunk = this.findHunk(editor.document, hunk.line + hunk.numHunkLines);
@@ -336,8 +389,11 @@ class DiffMode {
         const path = header.toPath;
         const indexResult = await runCommand("git", ["show", `:${path}`], { trim: false });
         if (indexResult.ecode) {
-            if (await isUnmerged(path)) info(`'${path}' is unmerged`);
-            else info(`'${path}' is not under version control`);
+            if (await isUnmerged(path)) {
+                info(`'${path}' is unmerged`);
+            } else {
+                info(`'${path}' is not under version control`);
+            }
             return;
         }
         const index = indexResult.stdout;
@@ -348,13 +404,19 @@ class DiffMode {
         this.selectHunk(hunk);
         const matchLine = fromText.findInText(lines);
         if (matchLine < 0) {
-            if (toText.findInText(lines) != -1) info("Patch already staged!");
-            else info("Failed to find text to patch");
+            if (toText.findInText(lines) != -1) {
+                info("Patch already staged!");
+            } else {
+                info("Failed to find text to patch");
+            }
             return;
         }
         lines.splice(matchLine, fromText.text.length, ...toText.text);
-        if (fromText.missingNewline && !toText.missingNewline) lines.push("");
-        else if (toText.missingNewline && !fromText.missingNewline) lines.pop();
+        if (fromText.missingNewline && !toText.missingNewline) {
+            lines.push("");
+        } else if (toText.missingNewline && !fromText.missingNewline) {
+            lines.pop();
+        }
         const newContents = lines.join(usesCRLF ? "\r\n" : "\n");
         await updateIndex(header.toPath, { data: newContents });
         const newUri = withSplitLines(uri, []).with({
@@ -390,11 +452,15 @@ class DiffMode {
 
         // Ensure that we only try to split an actual hunk
         const hunk = this.findHunk(editor.document, line);
-        if (!hunk || line < hunk.line || line >= line + hunk.numHunkLines) return;
+        if (!hunk || line < hunk.line || line >= line + hunk.numHunkLines) {
+            return;
+        }
 
         // Do not allow removal of an unsplitted hunk
         const atHunk = editor.document.lineAt(line).text.startsWith("@@");
-        if (atHunk && !oldSplits.includes(line)) return;
+        if (atHunk && !oldSplits.includes(line)) {
+            return;
+        }
 
         let splits: number[];
         if (oldSplits.includes(line)) {
@@ -441,7 +507,9 @@ class DiffMode {
     async getSourceDoc(hunk: Hunk | null): Promise<vscode.TextDocument | null> {
         const header = this.getHeader(hunk);
         const repo = await RepositoryInfo.getSelectedRepo();
-        if (!header || !repo) return null;
+        if (!header || !repo) {
+            return null;
+        }
         return workspace.openTextDocument(repo.getPathUri(header.toPath));
     }
 
@@ -449,7 +517,9 @@ class DiffMode {
         for (let i = line; i >= 0; i--) {
             if (doc.lineAt(i).text.startsWith("@@")) {
                 const hunk = Hunk.fromLine(doc, i);
-                if (hunk && line < i + hunk.numHunkLines) return hunk;
+                if (hunk && line < i + hunk.numHunkLines) {
+                    return hunk;
+                }
                 break;
             }
         }

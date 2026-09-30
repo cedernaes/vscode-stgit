@@ -35,10 +35,14 @@ export class LatestLoad {
         try {
             value = await read();
         } catch (error) {
-            if (version === this.version) onError(error);
+            if (version === this.version) {
+                onError(error);
+            }
             return;
         }
-        if (version === this.version) publish(value);
+        if (version === this.version) {
+            publish(value);
+        }
     }
 }
 
@@ -80,7 +84,9 @@ export class RepoDisplayLoads {
     }
 
     loadSeries<T>(read: (reader: RepoReader) => Promise<T>, publish: (value: T) => void) {
-        if (this.paused) return Promise.resolve();
+        if (this.paused) {
+            return Promise.resolve();
+        }
         const reader = this.reader;
         return this.series.run(
             () => read(reader),
@@ -90,7 +96,9 @@ export class RepoDisplayLoads {
     }
 
     loadChanges<T>(read: (reader: RepoReader) => Promise<T>, publish: (value: T) => void) {
-        if (this.paused) return Promise.resolve();
+        if (this.paused) {
+            return Promise.resolve();
+        }
         const reader = this.reader;
         return this.changes.run(
             () => read(reader),

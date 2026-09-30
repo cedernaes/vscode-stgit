@@ -41,15 +41,20 @@ export class DiffProvider {
 
     async openCurrentFileDiff() {
         const editor = window.activeTextEditor;
-        if (!editor) return;
+        if (!editor) {
+            return;
+        }
         const path = workspace.asRelativePath(editor.document.uri);
         const uri = vscode.Uri.parse(`stgit-diff:///diff-${path}#file=${path}`);
         refreshDiff(uri);
         const result = await runCommand("git", ["diff", "--quiet", "--", path]);
         if (!result.ecode) {
             const r2 = await runCommand("git", ["ls-files", "--error-unmatch", "--", path]);
-            if (r2.ecode) info(`'${path}' is not under version control`);
-            else info(`'${path}' is unmodified`);
+            if (r2.ecode) {
+                info(`'${path}' is not under version control`);
+            } else {
+                info(`'${path}' is unmodified`);
+            }
         } else {
             openAndShowDiffDocument(uri);
         }
@@ -63,7 +68,9 @@ export class DiffProvider {
     private fixHunkNumbering(lines: string[], hunkStart: number) {
         const REGEXP = /@@ [-]([0-9]*),[0-9]* [+]([0-9]*),[0-9]* @@(.*)/;
         const matches = lines[hunkStart].match(REGEXP);
-        if (!matches) return;
+        if (!matches) {
+            return;
+        }
         const fStart = parseInt(matches[1]);
         const tStart = parseInt(matches[2]);
         const rest = matches[3];
@@ -98,13 +105,17 @@ export class DiffProvider {
     }
 
     private applyHunkSplitting(diff: string, splitSpec?: string): string {
-        if (!splitSpec) return diff;
+        if (!splitSpec) {
+            return diff;
+        }
         const splits = splitSpec.split(";").map((x) => parseInt(x));
         const diffLines = diff.split("\n");
         splits.forEach((n) => diffLines.splice(n, 0, "@#"));
 
         diffLines.forEach((s, i) => {
-            if (s.startsWith("@@")) this.fixHunkNumbering(diffLines, i);
+            if (s.startsWith("@@")) {
+                this.fixHunkNumbering(diffLines, i);
+            }
         });
 
         return diffLines.join("\n");
@@ -140,11 +151,19 @@ export class DiffProvider {
                     return "* bad diff mode";
             }
         } else {
-            if (index) diffArgs.push("--cached");
-            else if (sha) diffArgs.push(`${sha}^`, sha);
-            else diffArgs.push("-2");
-            if (sha && !file) header = run("git", ["show", "--stat", sha], noTrim);
-            if (file) diffArgs.push(...(dest ? ["--find-renames"] : []), "--", file, ...(dest ? [dest] : []));
+            if (index) {
+                diffArgs.push("--cached");
+            } else if (sha) {
+                diffArgs.push(`${sha}^`, sha);
+            } else {
+                diffArgs.push("-2");
+            }
+            if (sha && !file) {
+                header = run("git", ["show", "--stat", sha], noTrim);
+            }
+            if (file) {
+                diffArgs.push(...(dest ? ["--find-renames"] : []), "--", file, ...(dest ? [dest] : []));
+            }
         }
         const diff = await run("git", ["diff", ...diffArgs], noTrim);
         const contents = header ? [await header, diff].join("\n") : diff;

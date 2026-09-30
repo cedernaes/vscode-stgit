@@ -14,6 +14,8 @@
   ],
   "rules": {
     "max-len": ["error", { "code": 180 }],
+    // Make all control statements use curly braces
+    "curly": ["error", "all"],
     //"unused-imports/no-unused-imports": "error",
     "@typescript-eslint/no-unused-vars": "off",
     "@typescript-eslint/no-explicit-any": "off",
