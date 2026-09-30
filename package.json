@@ -597,6 +597,11 @@
                 "when": "resourceScheme == stgit"
             },
             {
+                "key": "escape",
+                "command": "stgit.cancelEmptyComment",
+                "when": "resourceScheme == stgit && commentEditorFocused && commentIsEmpty"
+            },
+            {
                 "key": "h",
                 "command": "sdiff.help",
                 "when": "resourceScheme == stgit-diff && editorTextFocus"

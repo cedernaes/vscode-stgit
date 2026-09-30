@@ -12,6 +12,10 @@ repository. Changes up to that version are documented in its
 
 ## [Unreleased]
 
+### Changed
+
+- Prompt before closing an edited commit message.
+
 ### Fixed
 
 - Made the cursor go to the _next_ file in the list after staging one file so it's easy to stage multiple files after one another quicklyr.
