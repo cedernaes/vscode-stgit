@@ -12,13 +12,13 @@ Install [StGit Revived](https://marketplace.visualstudio.com/items?itemName=cede
 
 ## Features
 
-The StGit patch series is displayed in a window. StGit and Git operations, bound to various keyboard shortcuts, allow the series to be reworked as desired.
+The StGit patch series is displayed as a table in a webview. Status symbols distinguish applied and popped patches as well as modified, added, deleted, and conflicted files. A loading indicator appears while StGit commands or status reads are running. StGit and Git operations are available through the existing keyboard shortcuts when the webview is focused.
+
+Use the arrow keys to select patches and files, Enter to expand a patch or open a file, and `m`/`u` to mark or unmark patches. Commit messages open in the webview; use `Ctrl-C Ctrl-C` or the Commit button to submit. Press Escape to cancel; you are asked to confirm only if the message has unsaved changes.
 
 The extension also provides an Emacs-like diff mode, which among other things allows individual hunks to be applied, staged or split into smaller hunks.
 
 While the StGit window is open, it follows the repository of the active file, including files in submodules.
-
-![Example](images/example.png)
 
 > [!TIP]
 >
@@ -40,9 +40,13 @@ This extension requires StGit to be installed (the executable is called `stg`). 
 
 Git history entries use the effective `format.pretty` Git configuration. Custom `format:` and `tformat:` values and named `pretty.<name>` aliases are supported. Multiline output is flattened to one line, and terminal colors are omitted. If no reusable one-line format is configured, the extension uses `%h   %s`.
 
+## Development
+
+Starting any Extension Development Host debug configuration builds both the extension and the React webview before starting the background watch task. Subsequent webview JS/CSS rebuilds automatically reload the open StGit panel in the development host, preserving its selection, draft, and scroll position. For extension-host code changes, reload the Extension Development Host window to load the newly compiled code. Run `npm run compile` for a one-off build or `npm run watch` outside debugging; restart an older watch process after changing the build scripts. `npm run test:unit` includes a DOM test of the compiled webview; `npm test` runs the VS Code extension-host suite when its test executable is available.
+
 ## Known Issues
 
-The StGit extension can be used together with the popular Vim mode for VsCode, but there are currently a few key mapping conflicts for the StGit editor.
+Vim extensions may intercept some StGit keyboard shortcuts in the webview. Closing the StGit tab while editing a commit message discards the draft; cancel the editor before closing to get a confirmation.
 
 ## Release Notes
 

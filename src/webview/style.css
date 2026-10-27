@@ -1,0 +1,274 @@
+:root {
+    color-scheme: light dark;
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 12px;
+}
+body {
+    margin: 0;
+    color: var(--vscode-foreground);
+    background: var(--vscode-editor-background);
+}
+#root,
+#root table,
+#root button,
+#root textarea {
+    font-family: var(--vscode-editor-font-family, monospace);
+}
+header {
+    padding: 5px 10px 3px;
+    background: var(--vscode-editor-background);
+    border-bottom: 1px solid var(--vscode-panel-border);
+}
+.heading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 24px;
+}
+.branch {
+    flex: 1;
+    min-width: 0;
+    font-size: 1em;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+.submodule {
+    color: var(--vscode-terminal-ansiCyan, var(--vscode-charts-blue));
+}
+button {
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+.tool {
+    display: inline-grid;
+    place-items: center;
+    border: 0;
+    background: transparent;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+.tool:hover,
+.expand:hover {
+    background: var(--vscode-toolbar-hoverBackground);
+}
+.tool:focus-visible,
+.expand:focus-visible,
+tr:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: -1px;
+}
+.loading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 20px;
+    color: var(--vscode-descriptionForeground);
+    font-size: 0.9em;
+}
+.spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--vscode-progressBar-background);
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+body.vscode-reduce-motion .spinner {
+    animation: none;
+    border-right-color: currentColor;
+}
+.notice {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 18px;
+    color: var(--vscode-editorWarning-foreground);
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+th {
+    background: var(--vscode-editor-background);
+    border-bottom: 1px solid var(--vscode-panel-border);
+    text-align: left;
+    font-size: 0.85em;
+    font-weight: 500;
+    color: var(--vscode-descriptionForeground);
+    padding: 3px 6px;
+}
+th:first-child {
+    width: 42px;
+}
+th:nth-child(2) {
+    width: 92px;
+}
+th:nth-child(4) {
+    width: 85px;
+}
+td {
+    padding: 1px 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+tr[data-row] {
+    height: 20px;
+    cursor: default;
+}
+tr[data-row]:hover {
+    background: var(--vscode-list-hoverBackground);
+}
+tr.selected {
+    background: var(--vscode-list-activeSelectionBackground);
+    color: var(--vscode-list-activeSelectionForeground);
+}
+tr.history {
+    color: var(--vscode-descriptionForeground);
+}
+tr.highlighted:not(.selected) {
+    background: var(--vscode-editor-findMatchHighlightBackground);
+}
+.mark {
+    display: inline-grid;
+    place-items: center;
+    width: 16px;
+    color: var(--vscode-charts-orange);
+}
+.expand {
+    display: inline-grid;
+    place-items: center;
+    vertical-align: middle;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    width: 18px;
+    height: 18px;
+}
+.symbol {
+    font-weight: 700;
+}
+.applied .name {
+    color: var(--vscode-terminal-ansiBrightYellow, var(--vscode-charts-yellow));
+    font-weight: 600;
+}
+.popped .name {
+    color: var(--vscode-terminal-ansiCyan, var(--vscode-charts-blue));
+}
+.index .name,
+.work-tree .name {
+    color: var(--vscode-terminal-ansiBrightCyan, var(--vscode-charts-blue));
+    font-weight: 600;
+}
+.applied .symbol {
+    color: var(--vscode-charts-green);
+}
+.popped .symbol {
+    color: var(--vscode-charts-orange);
+}
+.file .name {
+    padding-left: 18px;
+}
+.empty .name {
+    padding-left: 18px;
+    color: var(--vscode-descriptionForeground);
+}
+.file .symbol,
+.file td:last-child {
+    font-weight: 600;
+}
+.file[data-kind="U"] .symbol,
+.file[data-kind="U"] td:last-child {
+    color: var(--vscode-gitDecoration-conflictingResourceForeground, var(--vscode-terminal-ansiBrightRed));
+}
+.file[data-kind="D"] .symbol,
+.file[data-kind="D"] td:last-child,
+.file[data-kind="R"] .symbol,
+.file[data-kind="R"] td:last-child {
+    color: var(--vscode-gitDecoration-deletedResourceForeground, var(--vscode-terminal-ansiBrightRed));
+}
+.file[data-kind="A"] .symbol,
+.file[data-kind="A"] td:last-child,
+.file[data-kind="C"] .symbol,
+.file[data-kind="C"] td:last-child,
+.file[data-kind="O"] .symbol,
+.file[data-kind="O"] td:last-child {
+    color: var(--vscode-gitDecoration-addedResourceForeground, var(--vscode-terminal-ansiBrightGreen));
+}
+.file[data-kind="M"] .symbol,
+.file[data-kind="M"] td:last-child,
+.file[data-kind="T"] .symbol,
+.file[data-kind="T"] td:last-child {
+    color: var(--vscode-gitDecoration-modifiedResourceForeground, var(--vscode-terminal-ansiBrightYellow));
+}
+.file[data-kind="X"] .symbol,
+.file[data-kind="X"] td:last-child {
+    color: var(--vscode-editorWarning-foreground, var(--vscode-terminal-ansiBrightYellow));
+}
+tr.selected .name,
+tr.selected .symbol,
+tr.selected td:last-child,
+tr.selected .mark {
+    color: inherit;
+}
+.composer {
+    position: sticky;
+    bottom: 0;
+    padding: 14px 18px;
+    border-top: 1px solid var(--vscode-panel-border);
+    background: var(--vscode-editor-background);
+}
+.composer label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+textarea {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 125px;
+    resize: vertical;
+    font: inherit;
+    color: var(--vscode-input-foreground);
+    background: var(--vscode-input-background);
+    border: 1px solid var(--vscode-input-border);
+    padding: 8px;
+}
+.actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    justify-content: flex-end;
+}
+.actions button {
+    padding: 5px 12px;
+    background: var(--vscode-button-secondaryBackground);
+    color: var(--vscode-button-secondaryForeground);
+    border: 0;
+    border-radius: 3px;
+}
+.actions button.primary {
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+}
+@media (max-width: 540px) {
+    th:nth-child(4),
+    td:nth-child(4) {
+        display: none;
+    }
+    th:nth-child(2) {
+        width: 80px;
+    }
+    header {
+        padding: 8px;
+    }
+}

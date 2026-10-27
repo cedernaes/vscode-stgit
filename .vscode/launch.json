@@ -11,7 +11,7 @@
             "request": "launch",
             "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
             "outFiles": ["${workspaceFolder}/out/**/*.js"],
-            "preLaunchTask": "${defaultBuildTask}"
+            "preLaunchTask": "stgit: debug"
         },
         {
             "name": "Run Extension (Clean)",
@@ -19,7 +19,7 @@
             "request": "launch",
             "args": ["--extensionDevelopmentPath=${workspaceFolder}", "--disable-extensions"],
             "outFiles": ["${workspaceFolder}/out/**/*.js"],
-            "preLaunchTask": "${defaultBuildTask}"
+            "preLaunchTask": "stgit: debug"
         },
         {
             "name": "Extension Tests",
@@ -27,7 +27,7 @@
             "request": "launch",
             "args": ["--extensionDevelopmentPath=${workspaceFolder}", "--extensionTestsPath=${workspaceFolder}/out/test/suite/index"],
             "outFiles": ["${workspaceFolder}/out/test/**/*.js"],
-            "preLaunchTask": "${defaultBuildTask}"
+            "preLaunchTask": "stgit: debug"
         }
     ]
 }

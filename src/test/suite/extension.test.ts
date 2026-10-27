@@ -132,15 +132,14 @@ suite("Extension Test Suite", () => {
         assert.deepStrictEqual(commit.getLines(), ["▸ abc12   Committed change"]);
     });
 
-    test("Disables native folding in the StGit document", async () => {
+    test("Registers StGit webview actions without a virtual document", async () => {
         const extension = vscode.extensions.getExtension("cedernaes.stgit-revived");
         assert.ok(extension);
         await extension.activate();
-        const uri = vscode.Uri.from({ scheme: "stgit", path: "/StGit" });
-        const doc = await vscode.workspace.openTextDocument(uri);
-        assert.strictEqual(doc.languageId, "stgit-buffer");
-        const ranges = await vscode.commands.executeCommand<vscode.FoldingRange[]>("vscode.executeFoldingRangeProvider", uri);
-        assert.deepStrictEqual(ranges, []);
+        const registered = await vscode.commands.getCommands(true);
+        assert.ok(registered.includes("stgit.open"));
+        assert.ok(registered.includes("stgit.refresh"));
+        assert.ok(registered.includes("stgit.submitComment"));
     });
 
     test("Keeps the cursor on its file when a redraw changes line counts", () => {
