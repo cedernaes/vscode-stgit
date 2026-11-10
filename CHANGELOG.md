@@ -12,6 +12,8 @@ repository. Changes up to that version are documented in its
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-11-10
+
 ### Fixed
 
 - Pound symbols in commit titles aren't interpreted as comments anymore, and are rendered literally (instead of stripped).
