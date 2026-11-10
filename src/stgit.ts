@@ -229,14 +229,15 @@ export function formatCommitDescription(description: string, commitMessage: stri
     return hasBody ? `${description} […]` : description;
 }
 
-class StGitPatch extends Patch {
+export class StGitPatch extends Patch {
     static fromSeries(line: string, commitMessage: string, reader: RepoReader): Patch {
         const empty = line[0] === "0";
         const kind = line[1] === "-" ? "-" : "+";
         const symbol = line[1] as "+" | "-" | ">";
         const sha = line.slice(3, 43);
-        const label = line.slice(44).split("#")[0].trim();
-        const desc = (line.split("#")[1] ?? "").trim();
+        const [name, ...description] = line.slice(44).split("#");
+        const label = name.trim();
+        const desc = description.join("#").trim();
         const patch = new this(reader, formatCommitDescription(desc, commitMessage), label, kind, empty, symbol);
         patch.sha = sha;
         return patch;

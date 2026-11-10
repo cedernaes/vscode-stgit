@@ -6,7 +6,7 @@ import * as vscode from "vscode";
 import { findHunkTargetLine, HunkTarget } from "../../diff-mode";
 import { RepoReader } from "../../repo-reader";
 import { correspondingLine } from "../../stage-selection";
-import { formatCommitDescription, History, WorkTree } from "../../stgit";
+import { formatCommitDescription, History, StGitPatch, WorkTree } from "../../stgit";
 
 suite("Extension Test Suite", () => {
     vscode.window.showInformationMessage("Start all tests.");
@@ -19,6 +19,19 @@ suite("Extension Test Suite", () => {
     test("Formats multiline commit descriptions", () => {
         assert.strictEqual(formatCommitDescription("Title", "Title\n\nBody\n"), "Title […]");
         assert.strictEqual(formatCommitDescription("Title", "Title\n\n   \n"), "Title");
+    });
+
+    test("Preserves hashes in patch descriptions", () => {
+        const reader = new RepoReader(
+            { topLevelDir: "/repo" },
+            {
+                run: async () => "",
+                runCommand: async () => ({ stdout: "", stderr: "", ecode: 0 }),
+            },
+        );
+        const subject = "Fix #123 and #456";
+        const patch = StGitPatch.fromSeries(` > ${"a".repeat(40)} fix-bug # ${subject}`, `${subject}\n`, reader);
+        assert.strictEqual(patch.description, subject);
     });
 
     test("Shows the work-tree expansion state in its header", async () => {
