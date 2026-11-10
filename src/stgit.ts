@@ -3,7 +3,7 @@
 
 import * as vscode from "vscode";
 import { commands, window, workspace } from "vscode";
-import { confirmCommentDiscard } from "./comment-discard";
+import { CommentDraft, confirmCommentDiscard } from "./comment-discard";
 import { getStGitConfig } from "./config";
 import { openAndShowDiffDocument, refreshDiff } from "./diff-provider";
 import { getUserConfirmation, info, log, showStatusMessage } from "./extension";
@@ -413,6 +413,7 @@ class StGitDoc {
     private baseSha: string | null = null;
 
     private commentThread: vscode.CommentThread | null = null;
+    private commentDraft: CommentDraft | null = null;
 
     // Patch being edited in editor
     private editPatch: Patch | null = null;
@@ -446,6 +447,11 @@ class StGitDoc {
             workspace.onDidChangeTextDocument((ev) => {
                 if (ev.document === this.doc) {
                     this.updateEditorDecorations();
+                }
+            }),
+            workspace.onDidOpenTextDocument((document) => {
+                if (window.activeTextEditor?.document === this.doc) {
+                    this.commentDraft?.trackDocument(document);
                 }
             }),
             // this event fires when an entire tab group is added or removed
@@ -752,6 +758,7 @@ class StGitDoc {
             },
         };
         this.commentThread?.dispose();
+        this.commentDraft = new CommentDraft(body);
         const comments: vscode.Comment[] = [comment];
         const pos = new vscode.Position(line, 0);
         const range = new vscode.Range(pos, pos);
@@ -842,12 +849,13 @@ class StGitDoc {
     private async closeCommentEditor() {
         this.commentThread?.dispose();
         this.commentThread = null;
+        this.commentDraft = null;
         this.editPatch = null;
         await this.closeAllDiffEditors();
         await this.focusWindow();
     }
     private confirmDiscardComment(): Promise<boolean> {
-        return confirmCommentDiscard(!!this.commentThread, async () => {
+        return confirmCommentDiscard(this.commentDraft?.hasChanges ?? false, async () => {
             const choice = await window.showWarningMessage("Close the commit message editor? Unsaved changes may be lost.", { modal: true }, "Discard and Close");
             return choice === "Discard and Close";
         });

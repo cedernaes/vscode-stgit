@@ -3,6 +3,7 @@ import * as assert from "assert";
 // You can import and use all API from the 'vscode' module
 // as well as import your extension to test it
 import * as vscode from "vscode";
+import { CommentDraft } from "../../comment-discard";
 import { findHunkTargetLine, HunkTarget } from "../../diff-mode";
 import { RepoReader } from "../../repo-reader";
 import { correspondingLine } from "../../stage-selection";
@@ -14,6 +15,57 @@ suite("Extension Test Suite", () => {
     test("Sample test", () => {
         assert.strictEqual(-1, [1, 2, 3].indexOf(5));
         assert.strictEqual(-1, [1, 2, 3].indexOf(0));
+    });
+
+    test("Tracks unsaved changes in native comment drafts", async function () {
+        this.timeout(10000);
+        const document = await vscode.workspace.openTextDocument({ content: "Comment draft test" });
+        await vscode.window.showTextDocument(document);
+        const controller = vscode.comments.createCommentController("stgit-discard-test", "StGit discard test");
+        const body = "Original commit message";
+        const commentDraft = new CommentDraft(body);
+        let listener: vscode.Disposable | undefined;
+        let timer: NodeJS.Timeout | undefined;
+        try {
+            const draftOpened = new Promise<vscode.TextDocument>((resolve, reject) => {
+                timer = setTimeout(() => reject(new Error("Comment draft was not exposed as a text document")), 5000);
+                const checkDocument = (draft: vscode.TextDocument) => {
+                    if (draft.uri.scheme === "comment" && draft.getText() === body) {
+                        resolve(draft);
+                    }
+                };
+                const opened = vscode.workspace.onDidOpenTextDocument((draft) => {
+                    if (vscode.window.activeTextEditor?.document === document) {
+                        commentDraft.trackDocument(draft);
+                    }
+                    checkDocument(draft);
+                });
+                const changed = vscode.workspace.onDidChangeTextDocument((event) => checkDocument(event.document));
+                listener = vscode.Disposable.from(opened, changed);
+            });
+            const thread = controller.createCommentThread(document.uri, new vscode.Range(0, 0, 0, 0), [
+                { body, mode: vscode.CommentMode.Editing, author: { name: "Commit Message" } },
+            ]);
+            thread.canReply = false;
+            thread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
+            const draft = await draftOpened;
+            assert.strictEqual(draft.getText(), body);
+            assert.strictEqual(commentDraft.hasChanges, false);
+            const edit = new vscode.WorkspaceEdit();
+            edit.insert(draft.uri, new vscode.Position(0, body.length), " changed");
+            assert.strictEqual(await vscode.workspace.applyEdit(edit), true);
+            assert.strictEqual(draft.getText(), `${body} changed`);
+            assert.strictEqual(commentDraft.hasChanges, true);
+            const revert = new vscode.WorkspaceEdit();
+            revert.replace(draft.uri, new vscode.Range(0, 0, 0, draft.getText().length), body);
+            assert.strictEqual(await vscode.workspace.applyEdit(revert), true);
+            assert.strictEqual(commentDraft.hasChanges, false);
+        } finally {
+            clearTimeout(timer);
+            listener?.dispose();
+            controller.dispose();
+            await vscode.commands.executeCommand("workbench.action.closeActiveEditor");
+        }
     });
 
     test("Formats multiline commit descriptions", () => {
