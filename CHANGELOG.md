@@ -12,6 +12,8 @@ repository. Changes up to that version are documented in its
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-11-10
+
 ### Fixed
 
 - Pressing escape now closes the commit editor without prompt if there are no unsaved changes.
