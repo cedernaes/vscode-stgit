@@ -12,6 +12,62 @@ function deferred<T>() {
 }
 
 suite("Repository display loads", () => {
+    test("reports only current series and change reads as loading", async () => {
+        const oldSeries = deferred<string>();
+        const currentSeries = deferred<string>();
+        const changes = deferred<string>();
+        const loading: boolean[] = [];
+        const failures: string[] = [];
+        const loads = new RepoDisplayLoads(
+            { topLevelDir: "/repo" },
+            { run: async () => "", runCommand: async () => ({ stdout: "", stderr: "", ecode: 0 }) },
+            (_kind, error) => failures.push(String(error)),
+            (busy) => loading.push(busy),
+        );
+        const stale = loads.loadSeries(
+            () => oldSeries.promise,
+            () => undefined,
+        );
+        const files = loads.loadChanges(
+            () => changes.promise,
+            () => undefined,
+        );
+        const current = loads.loadSeries(
+            () => currentSeries.promise,
+            () => undefined,
+        );
+        assert.deepStrictEqual(loading, [true]);
+        oldSeries.resolve("stale");
+        await stale;
+        assert.deepStrictEqual(loading, [true]);
+        changes.resolve("files");
+        await files;
+        assert.deepStrictEqual(loading, [true]);
+        currentSeries.resolve("series");
+        await current;
+        assert.deepStrictEqual(loading, [true, false]);
+
+        const abandoned = deferred<string>();
+        const pending = loads.loadChanges(
+            () => abandoned.promise,
+            () => undefined,
+        );
+        loads.pause();
+        abandoned.resolve("ignored");
+        await pending;
+        assert.deepStrictEqual(loading, [true, false, true, false]);
+        loads.resume();
+        await loads.loadSeries(
+            async () => {
+                throw new Error("read failed");
+            },
+            () => undefined,
+        );
+        assert.deepStrictEqual(loading, [true, false, true, false, true, false]);
+        assert.deepStrictEqual(failures, ["Error: read failed"]);
+        loads.dispose();
+    });
+
     test("invalidates in-flight results and skips loads during a mutation", async () => {
         const oldSeries = deferred<string>();
         const oldChanges = deferred<string>();
@@ -219,7 +275,25 @@ suite("Repository display loads", () => {
         series.resolve("late series");
         changes.reject(new Error("late failure"));
         await Promise.all([pendingSeries, pendingChanges]);
-        assert.deepStrictEqual(shown, []);
+        assert.strictEqual(shown.length, 0);
         assert.deepStrictEqual(failures, []);
+        let readsAfterDispose = 0;
+        loads.resume();
+        await loads.loadSeries(
+            async () => {
+                readsAfterDispose++;
+                return "late series";
+            },
+            (result) => shown.push(result),
+        );
+        await loads.loadChanges(
+            async () => {
+                readsAfterDispose++;
+                return "late changes";
+            },
+            (result) => shown.push(result),
+        );
+        assert.strictEqual(readsAfterDispose, 0);
+        assert.strictEqual(shown.length, 0);
     });
 });

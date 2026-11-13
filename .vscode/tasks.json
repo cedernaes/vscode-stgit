@@ -4,9 +4,23 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "stgit: compile",
+            "type": "npm",
+            "script": "compile",
+            "problemMatcher": "$tsc"
+        },
+        {
+            "label": "stgit: watch",
             "type": "npm",
             "script": "watch",
-            "problemMatcher": "$tsc-watch",
+            "problemMatcher": {
+                "base": "$tsc-watch",
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": "^\\[0\\].*(Starting compilation in watch mode|File change detected\\. Starting incremental compilation)",
+                    "endsPattern": "^\\[0\\].*Found [0-9]+ errors?\\. Watching for file changes\\."
+                }
+            },
             "isBackground": true,
             "presentation": {
                 "reveal": "never"
@@ -15,6 +29,12 @@
                 "kind": "build",
                 "isDefault": true
             }
+        },
+        {
+            "label": "stgit: debug",
+            "dependsOrder": "sequence",
+            "dependsOn": ["stgit: compile", "stgit: watch"],
+            "problemMatcher": []
         }
     ]
 }

@@ -27,12 +27,6 @@
     "publisher": "cedernaes",
     "icon": "images/icon.png",
     "contributes": {
-        "configurationDefaults": {
-            "[stgit-buffer]": {
-                "editor.folding": false,
-                "editor.guides.indentation": false
-            }
-        },
         "configuration": {
             "title": "StGit",
             "properties": {
@@ -102,6 +96,16 @@
                 "command": "stgit.completePatchEdit",
                 "category": "StGit",
                 "title": "Update"
+            },
+            {
+                "command": "stgit.submitComment",
+                "category": "StGit",
+                "title": "Submit Commit Message"
+            },
+            {
+                "command": "stgit.initializeBranch",
+                "category": "StGit",
+                "title": "Initialize Branch"
             },
             {
                 "command": "stgit.open",
@@ -379,207 +383,202 @@
             {
                 "key": "r",
                 "command": "stgit.refresh",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "ctrl-u r",
                 "command": "stgit.refreshSpecific",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "g",
                 "command": "stgit.reload",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "ctrl-u g",
                 "command": "stgit.repair",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "shift+g",
                 "command": "stgit.gotoPatch",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "shift+p",
                 "command": "stgit.pushOrPopPatches",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "shift+.",
                 "command": "stgit.pushNextPatch",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "shift+,",
                 "command": "stgit.popCurrentPatch",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "shift+h",
                 "command": "stgit.setHistorySize",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "shift+m",
                 "command": "stgit.movePatchesTo",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "ctrl+c shift+b",
                 "command": "stgit.createBranch",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "shift+b",
                 "command": "stgit.switchBranch",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "f",
                 "command": "stgit.highlightFile",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "shift+f",
                 "command": "stgit.cancelHighlighting",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "u",
                 "command": "stgit.unmarkPatch",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "m",
                 "command": "stgit.markPatch",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "i",
                 "command": "stgit.toggleChanges",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "shift+u",
                 "command": "stgit.revertChanges",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "ctrl+c ctrl+b",
                 "command": "stgit.rebase",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "ctrl+c f",
                 "command": "stgit.gitFetch",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "ctrl+c p",
                 "command": "stgit.gitPush",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "ctrl+c r",
                 "command": "stgit.selectRemote",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "ctrl+c u",
                 "command": "stgit.selectUpstreamBranch",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "ctrl+u p",
                 "command": "stgit.gitForcePush",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "ctrl+shift+-",
                 "command": "stgit.undo",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "ctrl+u ctrl+shift+-",
                 "command": "stgit.hardUndo",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "ctrl+c ctrl+shift+-",
                 "command": "stgit.redo",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "shift+n",
                 "command": "stgit.newPatch",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "c",
                 "command": "stgit.createPatch",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "ctrl-c ctrl-c",
                 "command": "stgit.commitOrUncommitPatches",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "h",
                 "command": "stgit.help",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
-            },
-            {
-                "key": "enter",
-                "command": "stgit.toggleExpand",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "-",
                 "command": "stgit.navigateToParent",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "t",
                 "command": "stgit.toggleShowingUnknown",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "shift+R",
                 "command": "stgit.resolveConflict",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "e",
                 "command": "stgit.editCommitMessage",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "shift+s",
                 "command": "stgit.squashPatches",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "shift+d",
                 "command": "stgit.deletePatches",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "shift+=",
                 "command": "stgit.openDiffEditor",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "=",
                 "command": "stgit.showDiff",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "alt-=",
                 "command": "stgit.openDiff",
-                "when": "resourceScheme == stgit && editorTextFocus && !commentEditorFocused"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "ctrl+c ctrl+i",
@@ -588,18 +587,13 @@
             },
             {
                 "key": "ctrl+c ctrl+c",
-                "command": "editor.action.submitComment",
-                "when": "resourceScheme == stgit && commentEditorFocused"
+                "command": "stgit.submitComment",
+                "when": "activeWebviewPanelId == stgit && stgitEditing && !inQuickOpen && !terminalFocus"
             },
             {
                 "key": "escape",
                 "command": "stgit.cancel",
-                "when": "resourceScheme == stgit"
-            },
-            {
-                "key": "escape",
-                "command": "stgit.cancelEmptyComment",
-                "when": "resourceScheme == stgit && commentEditorFocused && commentIsEmpty"
+                "when": "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus"
             },
             {
                 "key": "h",
@@ -655,12 +649,14 @@
     },
     "scripts": {
         "vscode:prepublish": "npm run compile",
-        "compile": "tsc -p ./",
+        "compile": "tsc -p ./ && npm run compile:webview",
+        "compile:webview": "tsc --noEmit -p tsconfig.webview.json && esbuild src/webview/index.tsx --bundle --platform=browser --format=iife --jsx=automatic --minify --target=es2020 --outdir=out/webview",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
-        "watch": "tsc -watch -p ./",
+        "watch": "concurrently -k \"tsc --watch -p ./\" \"tsc --noEmit --watch -p tsconfig.webview.json\" \"npm run watch:webview\"",
+        "watch:webview": "esbuild src/webview/index.tsx --bundle --platform=browser --format=iife --jsx=automatic --target=es2020 --outdir=out/webview --watch",
         "pretest": "npm run compile && npm run lint && npm run test:grammar",
-        "lint": "eslint src --ext ts",
+        "lint": "eslint src --ext ts,tsx",
         "test": "node ./out/test/runTest.js",
         "test:unit": "npm run compile && mocha --ui tdd \"out/test/unit/**/*.test.js\" && npm run test:grammar",
         "test:grammar": "vscode-tmgrammar-test 'src/test/syntax/*.test.stgit'",
@@ -670,19 +666,28 @@
     },
     "devDependencies": {
         "@types/glob": "^8.0.3",
+        "@types/jsdom": "^30.0.0",
         "@types/mocha": "^9.1.1",
         "@types/node": "16.x",
+        "@types/react": "^19.3.0",
+        "@types/react-dom": "^19.3.0",
         "@types/vscode": "^1.91.0",
         "@typescript-eslint/eslint-plugin": "^5.59.0",
         "@typescript-eslint/parser": "^5.59.0",
         "@vscode/test-electron": "^2.1.5",
         "@vscode/vsce": "^3.6.0",
+        "concurrently": "^10.0.6",
+        "esbuild": "^0.28.2",
         "eslint": "^8.41.0",
         "eslint-config-prettier": "^9.1.2",
         "glob": "^8.0.3",
         "js-yaml": "^4.1.0",
+        "jsdom": "^30.1.3",
+        "lucide-react": "^1.61.0",
         "mocha": "^10.0.0",
         "prettier": "^3.9.9",
+        "react": "^19.3.1",
+        "react-dom": "^19.3.1",
         "typescript": "^5.0.4",
         "vscode-tmgrammar-test": "^0.1.3"
     }

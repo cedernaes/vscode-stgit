@@ -3,7 +3,8 @@
 
 import * as vscode from "vscode";
 import { commands, window, workspace } from "vscode";
-import { CommentDraft, confirmCommentDiscard } from "./comment-discard";
+import { formatUpstream } from "./branch-label";
+import { confirmCommentDiscard } from "./comment-discard";
 import { getStGitConfig } from "./config";
 import { openAndShowDiffDocument, refreshDiff } from "./diff-provider";
 import { getUserConfirmation, info, log, showStatusMessage } from "./extension";
@@ -12,9 +13,9 @@ import { MutationGate } from "./mutation-gate";
 import { RepositoryInfo } from "./repo";
 import { RepoDisplayLoads, RepoReader } from "./repo-reader";
 import { RepositoryFollower } from "./repository-follower";
-import { correspondingLine, nextStagedFileLine, remainingIndexFileLine } from "./stage-selection";
 import { StGitStateMonitor, readRepositoryState } from "./state-monitor";
-import { run, runAndReportErrors, runCommand, sleep } from "./util";
+import { StGitViewState, stgitWebviewHtml } from "./stgit-webview";
+import { run, runAndReportErrors, runCommand } from "./util";
 
 const RENAMEOPTS: readonly string[] = ["--find-renames"];
 
@@ -105,6 +106,13 @@ export class Delta {
         }
         return `${s2.padEnd(50)} ${sinfo}`;
     }
+    get statusLabel() {
+        const similarity = this.status === "R" ? ` ${Number(this.score)}%` : "";
+        return `${Delta.STATUS_MESSAGE[this.status]}${similarity}${this.permissionDelta}${this.stageInfoString ? ` ${this.stageInfoString}` : ""}`;
+    }
+    get kind() {
+        return this.status;
+    }
     static fromDiff(diffOutput: string): Delta[] {
         const entries: Delta[] = [];
         for (let s = diffOutput; ;) {
@@ -155,6 +163,18 @@ abstract class Patch {
         public readonly empty: boolean,
         private readonly symbol: "+" | "-" | ">" | " " = " ",
     ) {}
+
+    get rowId(): string {
+        return `${this.kind}:${this.kind === "H" ? this.sha : this.label}`;
+    }
+
+    get isExpanded(): boolean {
+        return this.expanded;
+    }
+
+    get statusSymbol(): string {
+        return this.symbol;
+    }
 
     async updateFromOld(old: Patch) {
         this.marked = old.marked;
@@ -373,13 +393,23 @@ class StGitDoc {
         () => {
             this.monitor.pause();
             this.displayLoads.pause();
+            this.running = true;
+            this.notifyDirty();
         },
         () => {
+            if (this.disposed) {
+                return;
+            }
             this.monitor.resume();
             this.displayLoads.resume();
             this.reload();
+            this.running = false;
+            this.notifyDirty();
         },
     );
+    private running = false;
+    private loading = false;
+    private disposed = false;
     private unknownFilesVisible = false;
     private monitor: StGitStateMonitor;
     private displayLoads: RepoDisplayLoads;
@@ -389,6 +419,7 @@ class StGitDoc {
     private popped: Patch[] = [];
     private index: Patch;
     private workTree: Patch;
+    private selectedRow: { patchId: string; path?: string } = { patchId: "I:" };
     private needRepair = false;
     private stgMissing = false;
     private branchInitialized = true;
@@ -412,62 +443,34 @@ class StGitDoc {
     // start of history
     private baseSha: string | null = null;
 
-    private commentThread: vscode.CommentThread | null = null;
-    private commentDraft: CommentDraft | null = null;
-
-    // Patch being edited in editor
+    private editing: { kind: "create" | "edit"; body: string } | null = null;
+    private editingInitialBody = "";
     private editPatch: Patch | null = null;
 
-    private mainViewColumn = window.tabGroups.all.length;
-
-    private subscriptions: vscode.Disposable[] = [];
-
-    private highlightRanges: vscode.Range[] = [];
-    private historyRanges: vscode.Range[] = [];
+    private get mainViewColumn(): vscode.ViewColumn {
+        return this.panel.viewColumn ?? vscode.ViewColumn.One;
+    }
 
     constructor(
-        public doc: vscode.TextDocument,
+        public panel: vscode.WebviewPanel,
         public repo: RepositoryInfo,
         public notifyDirty: () => void,
-        private commentController: vscode.CommentController,
     ) {
-        this.displayLoads = new RepoDisplayLoads(repo, { run, runCommand }, (kind, error) => log(`StGit ${kind} reload failed:`, String(error)));
+        this.displayLoads = new RepoDisplayLoads(
+            repo,
+            { run, runCommand },
+            (kind, error) => log(`StGit ${kind} reload failed:`, String(error)),
+            (loading) => {
+                this.loading = loading;
+                this.notifyDirty();
+            },
+        );
         this.index = new Index(this.reader);
         this.workTree = new WorkTree(this.reader, this.unknownFilesVisible);
-        this.subscriptions.push(
-            window.onDidChangeVisibleTextEditors((editors) => {
-                this.updateEditorDecorations();
-                for (const e of editors) {
-                    if (e.document === this.doc && e.viewColumn) {
-                        this.mainViewColumn = e.viewColumn;
-                        break;
-                    }
-                }
-            }),
-            workspace.onDidChangeTextDocument((ev) => {
-                if (ev.document === this.doc) {
-                    this.updateEditorDecorations();
-                }
-            }),
-            workspace.onDidOpenTextDocument((document) => {
-                if (window.activeTextEditor?.document === this.doc) {
-                    this.commentDraft?.trackDocument(document);
-                }
-            }),
-            // this event fires when an entire tab group is added or removed
-            window.onDidChangeTextEditorViewColumn((ev) => {
-                if (ev.textEditor.document === this.doc) {
-                    this.mainViewColumn = ev.viewColumn;
-                }
-            }),
-            getStGitConfig().onDidChangeConfiguration(() => {
-                this.updateConfiguration({ reload: true });
-            }),
-        );
+        this.configListener = getStGitConfig().onDidChangeConfiguration(() => this.updateConfiguration({ reload: true }));
         this.updateConfiguration({ reload: false });
         this.setupSubmoduleContext(repo);
         this.reload();
-        this.openInitialEditor();
         this.monitor = new StGitStateMonitor(repo, {
             readState: (currentRepo) => readRepositoryState(currentRepo, runCommand),
             watchFiles: (currentRepo, changed) => {
@@ -483,10 +486,13 @@ class StGitDoc {
         });
         this.monitor.start();
     }
+    private configListener: vscode.Disposable;
     dispose() {
+        this.disposed = true;
         this.displayLoads.dispose();
         this.monitor.dispose();
-        this.subscriptions.forEach((s) => s.dispose());
+        this.configListener.dispose();
+        void commands.executeCommand("setContext", "stgitEditing", false);
     }
 
     private get reader() {
@@ -499,6 +505,62 @@ class StGitDoc {
 
     private get patches() {
         return [...this.history, ...this.applied, this.index, this.workTree, ...this.popped];
+    }
+
+    selectRow(patchId: string, path?: string) {
+        if (!this.patches.some((patch) => patch.rowId === patchId && (path === undefined || patch.deltas.some((delta) => delta.path === path)))) {
+            return;
+        }
+        this.selectedRow = { patchId, path };
+    }
+
+    get viewState(): StGitViewState {
+        if (this.pendingPath) {
+            const patch = this.patches.find((candidate) => candidate.isExpanded && candidate.deltas.some((delta) => delta.path === this.pendingPath));
+            if (patch) {
+                this.selectedRow = { patchId: patch.rowId, path: this.pendingPath };
+                this.pendingPath = null;
+            }
+        }
+        const selectedPatch = this.patches.find((patch) => patch.rowId === this.selectedRow.patchId);
+        const selected = selectedPatch
+            ? selectedPatch.isExpanded && selectedPatch.deltas.some((delta) => delta.path === this.selectedRow.path)
+                ? this.selectedRow
+                : { patchId: selectedPatch.rowId }
+            : { patchId: this.index.rowId };
+        this.selectedRow = selected;
+        return {
+            branch: `${this.branchName ?? this.baseSha?.slice(0, 16) ?? "<unknown>"}${this.upstreamString}`,
+            submodule: this.relativePathFromRoot,
+            notice: this.stgMissing
+                ? "StGit is not installed (stg binary missing)"
+                : !this.branchInitialized
+                  ? "Initialize this branch for StGit"
+                  : this.needRepair
+                    ? "StGit repair needed (Ctrl+U G)"
+                    : "",
+            noticeCommand: this.stgMissing ? "" : !this.branchInitialized ? "stgit.initializeBranch" : this.needRepair ? "stgit.repair" : "",
+            selected,
+            loading: this.running || this.loading,
+            editing: this.editing,
+            rows: this.patches.map((patch) => ({
+                id: patch.rowId,
+                kind: patch.kind,
+                symbol: patch.statusSymbol || (patch.kind === "I" ? "◫" : patch.kind === "W" ? "◇" : "○"),
+                description: patch.description,
+                expanded: patch.isExpanded,
+                marked: patch.marked,
+                empty: patch.empty,
+                highlighted: this.applied.includes(patch) && patch.deltas.some((delta) => this.highlightPaths?.has(delta.path)),
+                files: patch.deltas.map((delta) => ({
+                    path: delta.path,
+                    name: `${delta.path}${delta.destPath ? ` → ${delta.destPath}` : ""}${delta.isSubmodule ? " [submodule]" : ""}`,
+                    status: delta.statusLabel,
+                    kind: delta.kind,
+                    highlighted: this.highlightPaths?.has(delta.path) ?? false,
+                })),
+            })),
+        };
     }
     private updateConfiguration(opt: { reload: boolean }) {
         const config = getStGitConfig();
@@ -515,10 +577,15 @@ class StGitDoc {
         }
         this.parentRepoStack = stack;
         this.relativePathFromRoot = relativePath;
+        this.notifyDirty();
     }
 
     switchRepository(repo: RepositoryInfo, context: Awaited<ReturnType<typeof RepositoryInfo.buildParentStack>>) {
         if (this.repo.gitDir === repo.gitDir) {
+            return;
+        }
+        if (this.editing) {
+            info("Finish or cancel the commit message before switching repositories.");
             return;
         }
         this.displayLoads.switchRepository(repo);
@@ -532,6 +599,8 @@ class StGitDoc {
         this.popped = [];
         this.index = new Index(this.reader);
         this.workTree = new WorkTree(this.reader, this.unknownFilesVisible);
+        this.selectedRow = { patchId: this.index.rowId };
+        this.pendingPath = null;
         this.baseSha = null;
         this.branchName = null;
         this.remoteName = null;
@@ -546,6 +615,9 @@ class StGitDoc {
     }
 
     reload() {
+        if (this.disposed) {
+            return;
+        }
         void this.displayLoads.loadSeries(
             (reader) => this.readSeries(reader),
             (state) => {
@@ -625,6 +697,9 @@ class StGitDoc {
     }
 
     reloadIndexAndWorkTree() {
+        if (this.disposed) {
+            return;
+        }
         void this.displayLoads.loadChanges(
             async (reader) => {
                 const index = new Index(reader);
@@ -744,50 +819,19 @@ class StGitDoc {
         }
         this.reload();
     }
-    private async openCommentEditor(line: number, body: string, context: string, editPatch: Patch | null = null) {
-        if (this.commentThread && !(await this.confirmDiscardComment())) {
+    private async openCommentEditor(body: string, kind: "create" | "edit", editPatch: Patch | null = null) {
+        if (this.editing && !(await this.confirmDiscardComment())) {
             return;
         }
-        const comment: vscode.Comment = {
-            contextValue: context,
-            body: body,
-            mode: vscode.CommentMode.Editing,
-            label: "(use 50/72 format)",
-            author: {
-                name: "Commit Message",
-            },
-        };
-        this.commentThread?.dispose();
-        this.commentDraft = new CommentDraft(body);
-        const comments: vscode.Comment[] = [comment];
-        const pos = new vscode.Position(line, 0);
-        const range = new vscode.Range(pos, pos);
-        const thread = this.commentController.createCommentThread(this.doc.uri, range, comments);
-        thread.label = "Enter commit message:";
-        thread.contextValue = context;
-        thread.canReply = false;
-        thread.collapsibleState = vscode.CommentThreadCollapsibleState.Collapsed;
-        thread.state = vscode.CommentThreadState.Unresolved;
-        this.commentThread = thread;
+        this.editing = { kind, body };
+        this.editingInitialBody = body;
         this.editPatch = editPatch;
-
-        const delay = vscode.env.remoteName ? 400 : 200;
-        await sleep(delay);
-        await commands.executeCommand("workbench.action.expandAllComments");
-
-        // It is difficult to determine when comment editor is really visible.
-        // This is a workaround which works well in practice.
-        const next = pos.translate(1);
-        for (let i = 0; i < 8; i++) {
-            await sleep(100);
-            this.editor?.revealRange(new vscode.Range(pos, next));
-        }
+        void commands.executeCommand("setContext", "stgitEditing", true);
+        this.notifyDirty();
     }
 
     async createPatch() {
-        const patch = this.index.deltas.length ? this.index : this.workTree;
-        const line = patch.lineNum + patch.deltas.length;
-        await this.openCommentEditor(line, "", "stgit");
+        await this.openCommentEditor("", "create");
     }
     async editCommitMessage() {
         const p = this.curPatch;
@@ -796,7 +840,7 @@ class StGitDoc {
         }
         const sha = (await p.getSha()) ?? "error retrieving commit message>";
         const msg = await run("git", ["show", "-s", sha, "--format=%B"]);
-        await this.openCommentEditor(p.lineNum, msg, "stgit-edit", p);
+        await this.openCommentEditor(msg, "edit", p);
     }
     async copyCommitSha() {
         const sha = await this.curPatch?.getSha();
@@ -806,32 +850,56 @@ class StGitDoc {
         await vscode.env.clipboard.writeText(sha);
         showStatusMessage(`Copied commit SHA ${sha}`);
     }
+    setDraft(body: string) {
+        if (this.editing) {
+            this.editing.body = body;
+        }
+    }
+    get draft(): string {
+        return this.editing?.body ?? "";
+    }
+    async submitComment(body: string) {
+        if (!this.editing) {
+            return;
+        }
+        this.setDraft(body);
+        if (this.editing.kind === "create") {
+            await this.commentCreatePatch();
+        } else {
+            await this.completePatchEdit();
+        }
+    }
     async commentCreatePatch() {
-        if (this.commentThread) {
-            const msg = this.commentThread.comments[0].body;
-            await this.closeCommentEditor();
+        if (this.editing?.kind === "create") {
+            const msg = this.editing.body;
             if (msg) {
-                await run("stg", ["new", "-m", msg as string]);
+                const result = await runAndReportErrors("stg", ["new", "-m", msg]);
+                if (result.ecode !== 0) {
+                    return;
+                }
+                await this.closeCommentEditor();
                 await this.refresh();
             }
         }
     }
     async completePatchEdit() {
-        if (this.commentThread) {
-            const msg = this.commentThread.comments[0].body;
+        if (this.editing?.kind === "edit") {
+            const msg = this.editing.body;
             const editPatch = this.editPatch;
-            await this.closeCommentEditor();
             if (msg && editPatch) {
-                await run("stg", ["edit", "-m", msg as string, "--", editPatch.label]);
+                const result = await runAndReportErrors("stg", ["edit", "-m", msg, "--", editPatch.label]);
+                if (result.ecode !== 0) {
+                    return;
+                }
+                await this.closeCommentEditor();
                 this.reload();
             }
         }
     }
     focusWindow() {
-        return window.showTextDocument(this.doc, {
-            preview: false,
-            viewColumn: this.mainViewColumn,
-        });
+        if (!this.disposed) {
+            this.panel.reveal();
+        }
     }
     async closeAllDiffEditors() {
         const editors = window.visibleTextEditors.filter((e) => e.document.uri.scheme === "stgit-diff");
@@ -847,27 +915,34 @@ class StGitDoc {
         }
     }
     private async closeCommentEditor() {
-        this.commentThread?.dispose();
-        this.commentThread = null;
-        this.commentDraft = null;
+        this.editing = null;
+        this.editingInitialBody = "";
         this.editPatch = null;
+        void commands.executeCommand("setContext", "stgitEditing", false);
+        this.notifyDirty();
         await this.closeAllDiffEditors();
-        await this.focusWindow();
+        this.focusWindow();
     }
     private confirmDiscardComment(): Promise<boolean> {
-        return confirmCommentDiscard(this.commentDraft?.hasChanges ?? false, async () => {
+        const normalize = (text: string) => text.replace(/\r\n/g, "\n");
+        const hasChanges = !!this.editing && normalize(this.editing.body) !== normalize(this.editingInitialBody);
+        return confirmCommentDiscard(hasChanges, async () => {
             const choice = await window.showWarningMessage("Close the commit message editor? Unsaved changes may be lost.", { modal: true }, "Discard and Close");
             return choice === "Discard and Close";
         });
     }
     async cancel() {
+        if (this.editing?.kind === "create" && !this.editing.body) {
+            await this.closeCommentEditor();
+            return;
+        }
         if (!(await this.confirmDiscardComment())) {
             return;
         }
         await this.closeCommentEditor();
     }
     async cancelEmptyComment() {
-        if (this.commentThread?.contextValue === "stgit") {
+        if (this.editing?.kind === "create" && !this.editing.body) {
             await this.closeCommentEditor();
         } else {
             await this.cancel();
@@ -1201,18 +1276,9 @@ class StGitDoc {
                     viewColumn: this.alternateViewColumn,
                 });
             }
-        } else if (patch && patch.lineNum === this.curLine) {
+        } else if (patch) {
             await patch.toggleExpanded();
             this.notifyDirty();
-        } else {
-            const line = this.editor?.document.lineAt(this.curLine);
-            if (line?.text.startsWith("!")) {
-                if (this.needRepair) {
-                    await this.repair();
-                } else if (!this.branchInitialized) {
-                    await this.initializeBranch();
-                }
-            }
         }
     }
     async navigateToSubmodule(submodulePath: string) {
@@ -1239,7 +1305,7 @@ class StGitDoc {
         const parent = this.parentRepoStack.at(-1)!;
         const context = await RepositoryInfo.buildParentStack(parent.repo);
         this.switchRepository(parent.repo, context);
-        void this.moveCursorToDelta(parent.submodulePath);
+        this.moveCursorToDelta(parent.submodulePath);
     }
     async resolveConflict() {
         const change = this.curChange;
@@ -1267,12 +1333,7 @@ class StGitDoc {
                 } else {
                     await run("git", ["add", "--", change.path, ...(change.destPath ? [change.destPath] : [])]);
                 }
-                const editor = this.editor;
-                const nextLine = nextStagedFileLine(patch.lineNum, patch.deltas.indexOf(change), patch.deltas.length);
-                if (editor && nextLine !== undefined) {
-                    const pos = new vscode.Position(nextLine, editor.selection.active.character);
-                    editor.selection = new vscode.Selection(pos, pos);
-                }
+                this.selectedRow = { patchId: patch.rowId, path: patch.deltas[patch.deltas.indexOf(change) + 1]?.path };
             } else {
                 await run("git", ["add", "-u"]);
             }
@@ -1280,12 +1341,8 @@ class StGitDoc {
         } else if (patch?.kind == "I") {
             if (change) {
                 await run("git", ["restore", "-S", "--", change.path, ...(change.destPath ? [change.destPath] : [])]);
-                const editor = this.editor;
-                if (editor) {
-                    const line = remainingIndexFileLine(patch.lineNum, patch.deltas.indexOf(change), patch.deltas.length);
-                    const pos = new vscode.Position(line, editor.selection.active.character);
-                    editor.selection = new vscode.Selection(pos, pos);
-                }
+                const index = patch.deltas.indexOf(change);
+                this.selectedRow = { patchId: patch.rowId, path: patch.deltas[index > 0 ? index - 1 : 1]?.path };
             } else {
                 await run("git", ["reset", "HEAD"]);
             }
@@ -1382,140 +1439,24 @@ class StGitDoc {
         const curPatch = this.curPatch;
         const ind = list.findIndex((p) => p === curPatch);
         const nextPatch = list[ind + 1];
-        if (this.editor) {
-            const line = nextPatch ? nextPatch.lineNum : this.curLine + 1;
-            const pos = new vscode.Position(line, 2);
-            this.editor.selection = new vscode.Selection(pos, pos);
-        }
+        this.selectedRow = { patchId: nextPatch?.rowId ?? curPatch?.rowId ?? this.index.rowId };
+        this.notifyDirty();
+    }
+    private moveCursorToIndex() {
+        this.selectedRow = { patchId: this.index.rowId };
+        this.notifyDirty();
     }
 
-    private async openInitialEditor() {
-        const editor = await window.showTextDocument(this.doc, {
-            viewColumn: this.mainViewColumn,
-            preview: false,
-        });
-        const opts = editor.options;
-        opts.lineNumbers = vscode.TextEditorLineNumbersStyle.Off;
-        opts.cursorStyle = vscode.TextEditorCursorStyle.Block;
-
-        // move cursor to Index
-        this.moveCursorToIndexAtOpen(editor);
-    }
-
-    private async moveCursorToIndex() {
-        const editor = this.editor;
-        if (!editor) {
-            return;
-        }
-        this.moveCursorToIndexAtOpen(editor);
-    }
-
-    private async moveCursorToDelta(path: string) {
-        const editor = this.editor;
-        if (!editor) {
-            return;
-        }
-        // The work tree deltas may load after several document
-        // updates, so keep trying on each update until found.
-        let resolve: () => void;
-        const found = new Promise<void>((r) => {
-            resolve = r;
-        });
-        const watcher = workspace.onDidChangeTextDocument((e) => {
-            if (e.document !== this.doc) {
-                return;
-            }
-            for (const p of this.patches) {
-                const idx = p.deltas.findIndex((d) => d.path === path);
-                if (idx < 0) {
-                    continue;
-                }
-                const line = p.lineNum + idx + 1;
-                const pos = new vscode.Position(line, 0);
-                editor.selection = new vscode.Selection(pos, pos);
-                editor.revealRange(new vscode.Range(pos, pos));
-                resolve();
-                return;
-            }
-        });
-        const winner = await Promise.race([found.then(() => "found" as const), sleep(4000).then(() => "timeout" as const)]);
-        watcher.dispose();
-        if (winner === "timeout") {
-            this.moveCursorToIndex();
-        }
-    }
-
-    private async moveCursorToIndexAtOpen(editor: vscode.TextEditor) {
-        let resolve: () => void;
-        const found = new Promise<void>((r) => {
-            resolve = r;
-        });
-        const watcher = workspace.onDidChangeTextDocument((e) => {
-            if (e.document !== this.doc) {
-                return;
-            }
-            const line = this.index.lineNum;
-            if (line === 0) {
-                return;
-            }
-            const p = new vscode.Position(line, 0);
-            editor.selection = new vscode.Selection(p, p);
-            editor.revealRange(new vscode.Range(p, p));
-            resolve();
-        });
-        const winner = await Promise.race([found.then(() => "found" as const), sleep(4000).then(() => "timeout" as const)]);
-        watcher.dispose();
-        if (winner === "timeout") {
-            this.moveCursorToIndex();
-        }
-    }
-
-    private updateDecorations() {
-        this.highlightRanges = this.applied.filter((p) => p.deltas.some((d) => this.highlightPaths?.has(d.path))).map((p) => new vscode.Range(p.lineNum, 2, p.lineNum, 2));
-        this.historyRanges = this.history.map((p) => new vscode.Range(p.lineNum, 0, p.lineNum, 999));
-        this.updateEditorDecorations();
-    }
-
-    private updateEditorDecorations() {
-        for (const editor of window.visibleTextEditors) {
-            if (editor.document !== this.doc) {
-                continue;
-            }
-
-            const cls = StGitMode.instance!;
-            editor.setDecorations(cls.fileHighlightDecoration, this.highlightRanges);
-            editor.setDecorations(cls.historyDecoration, this.historyRanges);
-        }
-    }
-
-    get editor(): vscode.TextEditor | null {
-        const active = window.activeTextEditor;
-        if (active?.document === this.doc) {
-            return active;
-        } else {
-            return window.visibleTextEditors.find((e) => e.document === this.doc) ?? null;
-        }
-    }
-    private get curLine(): number {
-        return this.editor?.selection.active.line ?? -1;
+    private pendingPath: string | null = null;
+    private moveCursorToDelta(path: string) {
+        this.pendingPath = path;
+        this.notifyDirty();
     }
     private get curPatch(): Patch | null {
-        const line = this.curLine;
-        for (const p of this.patches) {
-            if (p.lineNum <= line && line < p.lineNum + p.lineCount) {
-                return p;
-            }
-        }
-        return null;
+        return this.patches.find((patch) => patch.rowId === this.selectedRow.patchId) ?? null;
     }
     private get curChange(): Delta | null {
-        const line = this.curLine;
-        for (const p of this.patches) {
-            if (p.lineNum < line && line < p.lineNum + p.lineCount) {
-                return p.deltas[line - p.lineNum - 1] ?? null;
-            }
-        }
-        return null;
+        return this.curPatch?.deltas.find((delta) => delta.path === this.selectedRow.path) ?? null;
     }
     get alternateViewColumn() {
         const col = this.mainViewColumn;
@@ -1523,66 +1464,18 @@ class StGitDoc {
     }
 
     private get upstreamString(): string {
-        if (this.remoteBranch && this.remoteName) {
-            return ` <-> ${this.remoteName}/${this.remoteBranch}`;
-        }
-        if (this.remoteName) {
-            return ` (${this.remoteName})`;
-        }
-        return "";
-    }
-
-    get documentContents(): string {
-        const b = this.branchName ?? this.baseSha?.slice(0, 16) ?? "<unknown>";
-        const branchLine = `Branch: ${b}${this.upstreamString}`;
-        const lines: string[] = [];
-        if (this.relativePathFromRoot) {
-            lines.push(`Submodule: ${this.relativePathFromRoot}`);
-        }
-        lines.push(branchLine, "");
-        function pushVec(patches: Patch[]) {
-            for (const p of patches) {
-                const patchLines = p.getLines();
-                p.updateLineSpan(lines.length, patchLines.length);
-                lines.push(...patchLines);
-            }
-        }
-        pushVec(this.history);
-        pushVec(this.applied);
-        if (!this.applied.length) {
-            lines.push("> <no patch applied>");
-        }
-        if (this.stgMissing) {
-            lines.push("! *** StGit not installed ('stg' binary missing) ***");
-        } else if (!this.branchInitialized) {
-            lines.push("! *** Setup branch for StGit ('stg init') ***");
-        } else if (this.needRepair) {
-            lines.push("! *** Repair needed [C-u g] ***");
-        }
-        pushVec([this.index]);
-        pushVec([this.workTree]);
-        pushVec(this.popped);
-
-        this.updateDecorations();
-        return lines.join("\n") + "\n--\n";
+        return formatUpstream(this.branchName, this.remoteName, this.remoteBranch);
     }
 }
 
 class StGitMode {
     static instance: StGitMode | null;
 
-    private changeEmitter = new vscode.EventEmitter<vscode.Uri>();
-    private pendingSelections = new Map<
-        vscode.TextEditor,
-        {
-            previous: string;
-            next: string;
-            selections: readonly vscode.Selection[];
-        }
-    >();
-    private commentController = vscode.comments.createCommentController("stgit.comments", "StGit");
-
     stgit: StGitDoc | null = null;
+    private assetRevision = 0;
+    private assetReloadTimer: ReturnType<typeof setTimeout> | undefined;
+    // Whether the next "ready" from the webview should pull keyboard focus into it
+    private focusWhenReady = true;
     private repositoryFollower = new RepositoryFollower({
         lookup: (directory: string) => RepositoryInfo.createForPath(directory),
         current: () => this.stgit?.repo ?? null,
@@ -1592,80 +1485,38 @@ class StGitMode {
         },
     });
 
-    readonly fileHighlightDecoration = window.createTextEditorDecorationType({
-        before: { contentText: "⏹ " },
-    });
-    readonly historyDecoration = window.createTextEditorDecorationType({
-        dark: { color: "#777" },
-        light: { color: "#999" },
-    });
-    constructor(context: vscode.ExtensionContext) {
-        const provider: vscode.TextDocumentContentProvider = {
-            onDidChange: this.changeEmitter.event,
-            provideTextDocumentContent: (uri: vscode.Uri, token) => {
-                const next = this.stgit?.documentContents ?? "\nIndex\n";
-                const doc = this.stgit?.doc;
-                if (doc && next !== doc.getText()) {
-                    this.pendingSelections.clear();
-                    for (const editor of window.visibleTextEditors) {
-                        if (editor.document === doc) {
-                            this.pendingSelections.set(editor, {
-                                previous: doc.getText(),
-                                next,
-                                selections: editor.selections,
-                            });
-                        }
-                    }
-                }
-                return next;
-            },
-        };
+    constructor(private readonly context: vscode.ExtensionContext) {
         const cmd = (cmd: string, func: () => void | Promise<unknown>) => {
-            return commands.registerTextEditorCommand(`stgit.${cmd}`, () => {
+            return commands.registerCommand(`stgit.${cmd}`, () => {
                 const doc = this.stgit;
                 return doc ? doc.runMutation(func) : func();
             });
         };
-        const globalCmd = (cmd: string, func: () => void | Promise<unknown>) =>
-            commands.registerCommand(`stgit.${cmd}`, () => {
-                const doc = this.stgit;
-                return doc ? doc.runMutation(func) : func();
-            });
+        if (context.extensionMode === vscode.ExtensionMode.Development) {
+            const assetRoot = vscode.Uri.joinPath(context.extensionUri, "out", "webview");
+            const assetWatcher = workspace.createFileSystemWatcher(new vscode.RelativePattern(assetRoot, "index.{js,css}"));
+            const scheduleReload = () => {
+                if (this.assetReloadTimer) {
+                    clearTimeout(this.assetReloadTimer);
+                }
+                this.assetReloadTimer = setTimeout(() => {
+                    this.assetReloadTimer = undefined;
+                    if (this.stgit) {
+                        this.assetRevision++;
+                        // The webview element survives an HTML update and keeps its own focus
+                        this.focusWhenReady = false;
+                        this.setWebviewHtml(this.stgit.panel);
+                    }
+                }, 150);
+            };
+            context.subscriptions.push(assetWatcher, assetWatcher.onDidChange(scheduleReload), assetWatcher.onDidCreate(scheduleReload));
+        }
         context.subscriptions.push(
             this /* self dispose */,
-
-            window.onDidChangeTextEditorSelection((event) => {
-                if (event.kind !== undefined) {
-                    const pending = this.pendingSelections.get(event.textEditor);
-                    if (pending) {
-                        pending.selections = event.selections;
-                    }
-                }
-            }),
-            workspace.onDidChangeTextDocument((event) => {
-                if (event.document !== this.stgit?.doc) {
-                    return;
-                }
-                for (const [editor, pending] of this.pendingSelections) {
-                    if (event.document.getText() !== pending.next) {
-                        continue;
-                    }
-                    editor.selections = pending.selections.map((selection) => {
-                        const position = (point: vscode.Position) => {
-                            const line = correspondingLine(pending.previous, pending.next, point.line);
-                            const column = Math.min(point.character, event.document.lineAt(line).text.length);
-                            return new vscode.Position(line, column);
-                        };
-                        return new vscode.Selection(position(selection.anchor), position(selection.active));
-                    });
-                    editor.revealRange(editor.selection, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
-                    this.pendingSelections.delete(editor);
-                }
-            }),
-
-            globalCmd("open", () => this.openStgit()),
+            commands.registerCommand("stgit.open", () => this.openStgit()),
             cmd("refresh", () => this.stgit?.refresh()),
             cmd("repair", () => this.stgit?.repair()),
+            cmd("initializeBranch", () => this.stgit?.initializeBranch()),
             cmd("refreshSpecific", () => this.stgit?.refreshSpecific()),
             cmd("createBranch", () => this.stgit?.createBranch()),
             cmd("switchBranch", () => this.stgit?.switchBranch()),
@@ -1691,6 +1542,7 @@ class StGitMode {
             cmd("movePatchesTo", () => this.stgit?.movePatchesTo()),
             cmd("commentCreatePatch", () => this.stgit?.commentCreatePatch()),
             cmd("completePatchEdit", () => this.stgit?.completePatchEdit()),
+            cmd("submitComment", () => this.stgit?.submitComment(this.stgit.draft)),
             cmd("cancel", () => this.stgit?.cancel()),
             cmd("cancelEmptyComment", () => this.stgit?.cancelEmptyComment()),
             cmd("editCommitMessage", () => this.stgit?.editCommitMessage()),
@@ -1710,24 +1562,7 @@ class StGitMode {
             cmd("redo", () => this.stgit?.redo()),
             cmd("help", () => this.stgit?.help()),
             cmd("navigateToParent", () => this.stgit?.navigateToParent()),
-
-            workspace.registerTextDocumentContentProvider("stgit", provider),
-            vscode.languages.registerFoldingRangeProvider(
-                { scheme: "stgit", language: "stgit-buffer" },
-                {
-                    provideFoldingRanges: () => [],
-                },
-            ),
-
-            workspace.onDidCloseTextDocument((doc) => {
-                if (doc === this.stgit?.doc) {
-                    this.pendingSelections.clear();
-                    this.repositoryFollower.cancel();
-                    this.stgit.dispose();
-                    this.stgit = null;
-                }
-            }),
-            workspace.onDidSaveTextDocument((doc) => {
+            workspace.onDidSaveTextDocument(() => {
                 this.stgit?.reloadWorkTree();
             }),
             window.onDidChangeActiveTextEditor((editor) => {
@@ -1738,21 +1573,18 @@ class StGitMode {
         );
     }
     dispose() {
-        this.pendingSelections.clear();
+        if (this.assetReloadTimer) {
+            clearTimeout(this.assetReloadTimer);
+        }
         this.repositoryFollower.cancel();
         this.stgit?.dispose();
         this.stgit = null;
-        this.commentController.dispose();
-        this.changeEmitter.dispose();
         StGitMode.instance = null;
-
-        this.fileHighlightDecoration.dispose();
-        this.historyDecoration.dispose();
     }
     private async openStgit() {
         if (this.stgit) {
             const scheme = window.activeTextEditor?.document.uri.scheme || "";
-            const isInStgitBuffer = ["stgit", "stgit-diff"].includes(scheme);
+            const isInStgitBuffer = this.stgit.panel.active || scheme === "stgit-diff";
             if (!isInStgitBuffer) {
                 const repo = await RepositoryInfo.lookup();
                 if (!repo) {
@@ -1762,7 +1594,7 @@ class StGitMode {
                 const context = await RepositoryInfo.buildParentStack(repo);
                 this.stgit.switchRepository(repo, context);
             }
-            await this.stgit.focusWindow();
+            this.stgit.focusWindow();
             this.stgit.reload();
         } else {
             const repo = await RepositoryInfo.lookup();
@@ -1771,21 +1603,83 @@ class StGitMode {
                 return;
             }
             RepositoryInfo.setSelectedRepo(repo);
-            const doc = await vscode.languages.setTextDocumentLanguage(await workspace.openTextDocument(this.uri), "stgit-buffer");
-            this.stgit = new StGitDoc(
-                doc,
-                repo,
-                () => {
-                    if (this.stgit?.documentContents !== doc.getText()) {
-                        this.changeEmitter.fire(doc.uri);
-                    }
-                },
-                this.commentController,
-            );
+            const assetRoot = vscode.Uri.joinPath(this.context.extensionUri, "out", "webview");
+            this.focusWhenReady = true;
+            const panel = window.createWebviewPanel("stgit", "StGit", vscode.ViewColumn.Active, {
+                enableScripts: true,
+                localResourceRoots: [assetRoot],
+            });
+            this.stgit = new StGitDoc(panel, repo, () => {
+                if (this.stgit?.panel === panel && panel.visible) {
+                    void panel.webview.postMessage({ type: "render", state: this.stgit.viewState });
+                }
+            });
+            panel.webview.onDidReceiveMessage((message: unknown) => void this.handleMessage(panel, message));
+            panel.onDidChangeViewState(() => {
+                if (panel.visible && this.stgit?.panel === panel) {
+                    void panel.webview.postMessage({ type: "render", state: this.stgit.viewState });
+                }
+            });
+            panel.onDidDispose(() => {
+                if (this.stgit?.panel === panel) {
+                    this.repositoryFollower.cancel();
+                    this.stgit.dispose();
+                    this.stgit = null;
+                }
+            });
+            this.setWebviewHtml(panel);
         }
     }
-    private get uri() {
-        return vscode.Uri.from({ scheme: "stgit", path: "/StGit" });
+    private setWebviewHtml(panel: vscode.WebviewPanel) {
+        const assetRoot = vscode.Uri.joinPath(this.context.extensionUri, "out", "webview");
+        const query = `v=${this.assetRevision}`;
+        panel.webview.html = stgitWebviewHtml(panel.webview, {
+            script: vscode.Uri.joinPath(assetRoot, "index.js").with({ query }),
+            style: vscode.Uri.joinPath(assetRoot, "index.css").with({ query }),
+        });
+    }
+    private async handleMessage(panel: vscode.WebviewPanel, raw: unknown) {
+        const doc = this.stgit;
+        if (!doc || doc.panel !== panel || !raw || typeof raw !== "object") {
+            return;
+        }
+        const message = raw as Record<string, unknown>;
+        if (message.type === "ready") {
+            void panel.webview.postMessage({ type: "render", state: doc.viewState });
+            // VS Code recreates the webview when the panel is opened, moved to another
+            // group or shown again after being hidden, and focuses the panel before the
+            // new content has loaded, so keyboard focus never reaches it. Focus it again
+            // now that the content is ready.
+            const focus = this.focusWhenReady;
+            this.focusWhenReady = true;
+            if (focus && panel.active) {
+                panel.reveal(panel.viewColumn, false);
+            }
+        } else if (message.type === "select" && typeof message.patchId === "string" && (message.path === undefined || typeof message.path === "string")) {
+            doc.selectRow(message.patchId, message.path as string | undefined);
+        } else if (message.type === "draft" && typeof message.body === "string") {
+            doc.setDraft(message.body);
+        } else if (message.type === "submit" && typeof message.body === "string") {
+            await doc.runMutation(() => doc.submitComment(message.body as string));
+        } else if (message.type === "cancel") {
+            await doc.runMutation(() => doc.cancel());
+        } else if (
+            message.type === "command" &&
+            typeof message.command === "string" &&
+            [
+                "stgit.reload",
+                "stgit.refresh",
+                "stgit.newPatch",
+                "stgit.help",
+                "stgit.toggleExpand",
+                "stgit.markPatch",
+                "stgit.unmarkPatch",
+                "stgit.initializeBranch",
+                "stgit.repair",
+            ].includes(message.command)
+        ) {
+            await commands.executeCommand(message.command);
+        }
     }
 }
 

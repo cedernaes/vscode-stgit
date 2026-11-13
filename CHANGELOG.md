@@ -12,6 +12,10 @@ repository. Changes up to that version are documented in its
 
 ## [Unreleased]
 
+### Changed
+
+- The stgit buffer is now a web view with stricter controls of navigation. This obviates a bunch of issues with overloaded keyboard shortcuts and vim mode quirks.
+
 ## [1.1.2] - 2026-11-10
 
 ### Fixed

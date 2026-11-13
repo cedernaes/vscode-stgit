@@ -4,17 +4,18 @@ import * as path from "path";
 import { CommentDraft, confirmCommentDiscard } from "../../comment-discard";
 
 suite("Comment discard", () => {
-    test("Escape closes an empty focused comment without prompting", () => {
+    test("Escape cancels the webview composer without invoking patch actions", () => {
         const manifest = JSON.parse(readFileSync(path.resolve(__dirname, "../../../package.json"), "utf8"));
         const bindings = manifest.contributes.keybindings.filter((binding: { key: string; command: string; when?: string }) => {
-            return binding.key === "escape" && binding.when?.includes("resourceScheme == stgit");
+            return binding.key === "escape" && binding.when?.includes("activeWebviewPanelId == stgit");
         });
-        assert.strictEqual(bindings.at(-2).command, "stgit.cancel");
-        assert.deepStrictEqual(bindings.at(-1), {
-            key: "escape",
-            command: "stgit.cancelEmptyComment",
-            when: "resourceScheme == stgit && commentEditorFocused && commentIsEmpty",
-        });
+        assert.deepStrictEqual(bindings, [
+            {
+                key: "escape",
+                command: "stgit.cancel",
+                when: "activeWebviewPanelId == stgit && !stgitEditing && !inQuickOpen && !terminalFocus && !inputFocus",
+            },
+        ]);
     });
 
     test("closes without asking when there are no unsaved changes", async () => {
