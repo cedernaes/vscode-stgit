@@ -118,7 +118,10 @@ suite("StGit webview", () => {
             assert.deepStrictEqual(restoredScroll, [60]);
             assert.strictEqual(dom.window.document.querySelector("img"), null);
             assert.match(dom.window.document.querySelector(".name")!.textContent!, /<img src=x/);
-            assert.ok(dom.window.document.querySelector('[role="status"]'));
+            const status = () => dom.window.document.querySelector<HTMLElement>('.heading [role="status"]')!;
+            const spinnerVisibility = () => dom.window.getComputedStyle(status().querySelector(".spinner")!).visibility;
+            assert.strictEqual(status().textContent, "Running / refreshing...");
+            assert.strictEqual(spinnerVisibility(), "visible");
             for (const section of ["I:", "W:"]) {
                 const header = dom.window.document.querySelector<HTMLTableRowElement>(`tr[data-patch-id="${section}"]:not(.file)`)!;
                 assert.strictEqual(header.querySelector("[aria-expanded]")?.getAttribute("aria-expanded"), "true");
@@ -157,7 +160,9 @@ suite("StGit webview", () => {
             state.editing = { kind: "create", body: "Initial" };
             render();
             await until(() => dom.window.document.querySelector<HTMLTextAreaElement>("textarea")?.value === "Initial");
-            assert.strictEqual(dom.window.document.querySelector('[role="status"]'), null);
+            // The status slot stays in place when loading ends, so the layout does not shift.
+            assert.strictEqual(status().textContent, "");
+            assert.strictEqual(spinnerVisibility(), "hidden");
             const editor = dom.window.document.querySelector<HTMLTextAreaElement>("textarea")!;
             assert.match(dom.window.getComputedStyle(editor).fontFamily, /monospace/);
             const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, "value")!.set!;

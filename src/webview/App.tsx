@@ -225,6 +225,15 @@ export function App() {
                 {state?.submodule && <div className="submodule">Submodule: {state.submodule}</div>}
                 <div className="heading">
                     <div className="branch">{state?.branch ?? "StGit"}</div>
+                    <span
+                        className={state?.loading ? "loading active" : "loading"}
+                        role="status"
+                        aria-live="polite"
+                        title={state?.loading ? "Running / refreshing..." : undefined}
+                    >
+                        <span className="spinner" aria-hidden="true" />
+                        <span className="visually-hidden">{state?.loading ? "Running / refreshing..." : ""}</span>
+                    </span>
                     <button className="tool" title="Reload status (g)" aria-label="Reload status" onClick={() => command("stgit.reload")}>
                         <RotateCcw size={17} />
                     </button>
@@ -238,12 +247,6 @@ export function App() {
                         <Ellipsis size={17} />
                     </button>
                 </div>
-                {state?.loading && (
-                    <div className="loading" role="status" aria-live="polite">
-                        <span className="spinner" aria-hidden="true" />
-                        Running / refreshing...
-                    </div>
-                )}
             </header>
             {state?.notice && (
                 <div className="notice">
