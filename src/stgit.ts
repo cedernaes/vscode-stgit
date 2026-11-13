@@ -3,6 +3,7 @@
 
 import * as vscode from "vscode";
 import { commands, window, workspace } from "vscode";
+import { formatUpstream } from "./branch-label";
 import { confirmCommentDiscard } from "./comment-discard";
 import { getStGitConfig } from "./config";
 import { openAndShowDiffDocument, refreshDiff } from "./diff-provider";
@@ -1463,13 +1464,7 @@ class StGitDoc {
     }
 
     private get upstreamString(): string {
-        if (this.remoteBranch && this.remoteName) {
-            return ` <-> ${this.remoteName}/${this.remoteBranch}`;
-        }
-        if (this.remoteName) {
-            return ` (${this.remoteName})`;
-        }
-        return "";
+        return formatUpstream(this.branchName, this.remoteName, this.remoteBranch);
     }
 }
 
