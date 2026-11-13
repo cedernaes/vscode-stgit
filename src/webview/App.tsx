@@ -22,6 +22,10 @@ function matchesSelection(row: HTMLTableRowElement, selection: Selection): boole
     return row.dataset.patchId === selection.patchId && row.dataset.path === selection.path;
 }
 
+function nothingFocused(): boolean {
+    return !document.activeElement || document.activeElement === document.body;
+}
+
 export function App() {
     const [state, setState] = useState<StGitViewState | null>(null);
     const [selected, setSelected] = useState<Selection>({ patchId: "I:" });
@@ -43,7 +47,8 @@ export function App() {
             if (event.data?.type !== "render") {
                 return;
             }
-            restoreRowFocus.current = !!document.activeElement?.closest("tr[data-row]") || (editingRef.current && !event.data.state.editing);
+            restoreRowFocus.current =
+                !!document.activeElement?.closest("tr[data-row]") || (editingRef.current && !event.data.state.editing) || (document.hasFocus() && nothingFocused());
             if (!editingRef.current && event.data.state.editing) {
                 setDraft(event.data.state.editing.body);
                 focusEditor.current = true;
@@ -55,6 +60,18 @@ export function App() {
         window.addEventListener("message", onMessage);
         api.postMessage({ type: "ready" });
         return () => window.removeEventListener("message", onMessage);
+    }, []);
+
+    useEffect(() => {
+        // When VS Code focuses the webview, give keyboard focus to the selection
+        // (or the message editor) unless something in the page already has it.
+        const onFocus = () => {
+            if (nothingFocused()) {
+                (messageRef.current ?? document.querySelector<HTMLElement>("tr[data-row].selected"))?.focus({ preventScroll: true });
+            }
+        };
+        window.addEventListener("focus", onFocus);
+        return () => window.removeEventListener("focus", onFocus);
     }, []);
 
     useLayoutEffect(() => {
@@ -225,12 +242,7 @@ export function App() {
                 {state?.submodule && <div className="submodule">Submodule: {state.submodule}</div>}
                 <div className="heading">
                     <div className="branch">{state?.branch ?? "StGit"}</div>
-                    <span
-                        className={state?.loading ? "loading active" : "loading"}
-                        role="status"
-                        aria-live="polite"
-                        title={state?.loading ? "Running / refreshing..." : undefined}
-                    >
+                    <span className={state?.loading ? "loading active" : "loading"} role="status" aria-live="polite" title={state?.loading ? "Running / refreshing..." : undefined}>
                         <span className="spinner" aria-hidden="true" />
                         <span className="visually-hidden">{state?.loading ? "Running / refreshing..." : ""}</span>
                     </span>

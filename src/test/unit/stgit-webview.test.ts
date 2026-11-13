@@ -122,6 +122,11 @@ suite("StGit webview", () => {
             const spinnerVisibility = () => dom.window.getComputedStyle(status().querySelector(".spinner")!).visibility;
             assert.strictEqual(status().textContent, "Running / refreshing...");
             assert.strictEqual(spinnerVisibility(), "visible");
+            // When VS Code focuses the newly opened webview, the selected row takes keyboard focus.
+            assert.strictEqual(dom.window.document.activeElement, dom.window.document.body);
+            dom.window.dispatchEvent(new dom.window.FocusEvent("focus"));
+            assert.strictEqual(dom.window.document.activeElement?.getAttribute("data-patch-id"), "+:patch");
+            assert.strictEqual(dom.window.document.activeElement?.hasAttribute("data-path"), false);
             for (const section of ["I:", "W:"]) {
                 const header = dom.window.document.querySelector<HTMLTableRowElement>(`tr[data-patch-id="${section}"]:not(.file)`)!;
                 assert.strictEqual(header.querySelector("[aria-expanded]")?.getAttribute("aria-expanded"), "true");

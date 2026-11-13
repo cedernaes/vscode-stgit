@@ -1479,6 +1479,8 @@ class StGitMode {
     stgit: StGitDoc | null = null;
     private assetRevision = 0;
     private assetReloadTimer: ReturnType<typeof setTimeout> | undefined;
+    // Whether the next "ready" from the webview should pull keyboard focus into it
+    private focusWhenReady = true;
     private repositoryFollower = new RepositoryFollower({
         lookup: (directory: string) => RepositoryInfo.createForPath(directory),
         current: () => this.stgit?.repo ?? null,
@@ -1506,6 +1508,8 @@ class StGitMode {
                     this.assetReloadTimer = undefined;
                     if (this.stgit) {
                         this.assetRevision++;
+                        // The webview element survives an HTML update and keeps its own focus
+                        this.focusWhenReady = false;
                         this.setWebviewHtml(this.stgit.panel);
                     }
                 }, 150);
@@ -1605,6 +1609,7 @@ class StGitMode {
             }
             RepositoryInfo.setSelectedRepo(repo);
             const assetRoot = vscode.Uri.joinPath(this.context.extensionUri, "out", "webview");
+            this.focusWhenReady = true;
             const panel = window.createWebviewPanel("stgit", "StGit", vscode.ViewColumn.Active, {
                 enableScripts: true,
                 localResourceRoots: [assetRoot],
@@ -1646,6 +1651,15 @@ class StGitMode {
         const message = raw as Record<string, unknown>;
         if (message.type === "ready") {
             void panel.webview.postMessage({ type: "render", state: doc.viewState });
+            // VS Code recreates the webview when the panel is opened, moved to another
+            // group or shown again after being hidden, and focuses the panel before the
+            // new content has loaded, so keyboard focus never reaches it. Focus it again
+            // now that the content is ready.
+            const focus = this.focusWhenReady;
+            this.focusWhenReady = true;
+            if (focus && panel.active) {
+                panel.reveal(panel.viewColumn, false);
+            }
         } else if (message.type === "select" && typeof message.patchId === "string" && (message.path === undefined || typeof message.path === "string")) {
             doc.selectRow(message.patchId, message.path as string | undefined);
         } else if (message.type === "draft" && typeof message.body === "string") {
